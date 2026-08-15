@@ -240,6 +240,11 @@
   .panel-date { flex:1; font-size:13.5px; font-weight:600; }
   .panel-meta { font-size:11.5px; color:var(--faint); margin-top:2px; }
 
+
+  .streak-pill { font-size:10.5px; font-weight:800; letter-spacing:.04em;
+    color:var(--clay); background:var(--clay-soft); padding:3px 8px; border-radius:6px; }
+  .streak-pill.zero { color:var(--faint); background:rgba(236,231,214,.07); font-weight:600; }
+
   .fab { position:fixed; right:calc(50% - 320px + 18px); bottom:calc(84px + env(safe-area-inset-bottom));
     width:56px; height:56px; border-radius:50%; background:var(--frost); color:var(--bg); border:none;
     font-size:30px; font-weight:300; line-height:1; box-shadow:0 6px 20px rgba(0,0,0,.4); z-index:20; }
@@ -371,34 +376,31 @@ const DOW=['S','M','T','W','T','F','S'];
 const CATS={all:'All',health:'Health',sport:'Sport',mental:'Mental',planning:'Planning'};
 
 let ROUTINES=[
- {id:'plan-am',title:'Morning planning ping',time:'07:30',dur:15,cat:'planning'},
- {id:'teeth',title:'Brush teeth before eating',time:'07:45',dur:5,cat:'health'},
- {id:'workout',title:'Workout (tennis / run / HIIT)',time:'17:30',dur:60,cat:'sport'},
- {id:'base-training',title:'Base training',time:'18:45',dur:45,cat:'sport'},
- {id:'ice-bath',title:'Ice bath (6–7 °C)',time:'19:30',dur:15,cat:'health',days:[1,3,5]},
- {id:'snus-streak',title:'Log snus-free streak',time:'20:30',dur:5,cat:'mental'},
- {id:'plan-pm',title:'Evening planning ping',time:'20:30',dur:15,cat:'planning'},
- {id:'goals-checkin',title:'Goals 2026 check-in',time:'20:30',dur:20,cat:'planning',days:[0]},
- {id:'blue-light',title:'Blue-light glasses on',time:'21:00',dur:2,cat:'health'},
- {id:'pushups',title:'Push Ups',time:'18:00',dur:10,cat:'sport',optional:true},
- {id:'stretching',title:'Stretching',time:'21:30',dur:15,cat:'health',optional:true},
- {id:'winddown',title:'Wind-down',time:'22:00',dur:30,cat:'mental'},
+ {id:'morning-walk',title:'Morning walk',time:'06:45',dur:15,cat:'health'},
+ {id:'plan-am',title:'Morning planning',time:'07:15',dur:15,cat:'planning'},
+ {id:'teeth',title:'Brush teeth before eating',time:'07:30',dur:5,cat:'health'},
+ {id:'stretching',title:'Stretching',time:'18:30',dur:15,cat:'health',optional:true},
+ {id:'workout',title:'Workout (tennis / run / HIIT)',time:'17:30',dur:60,cat:'sport',optional:true},
+ {id:'base-training',title:'Base training - Zone 2',time:'18:45',dur:45,cat:'sport',optional:true},
+ {id:'blue-light',title:'Blue-light glasses on',time:'20:00',dur:2,cat:'health'},
+ {id:'plan-pm',title:'Evening planning',time:'20:30',dur:15,cat:'planning'},
+ {id:'snus-streak',title:'Log snus-free streak',time:'21:00',dur:5,cat:'mental',streak:true},
+ {id:'winddown',title:'Wind-down',time:'21:30',dur:30,cat:'mental'},
  {id:'sleep',title:'Sleep (sleep position)',time:'22:30',dur:1,cat:'health'}
 ];
 
 let SUPP_BLOCKS=[
- {id:'fasted',title:'Morning, fasted',time:'07:15',wait:'Wait 20–30 min before breakfast',items:[
-   {id:'gut',name:'Gut',sub:'Biogena / Sunday',dose:'2/1'},
-   {id:'iron',name:'Iron',sub:'SmartFerrin B12 · Hemoglobin',dose:'1'},
-   {id:'berberine',name:'Berberine',sub:'Metabolism',dose:'1 g'}]},
- {id:'breakfast',title:'After breakfast',time:'07:50',items:[
+ {id:'fasted',title:'Morning, fasted',time:'07:00',wait:'Wait 20–30 min before breakfast',items:[
+   {id:'gut',name:'Gut',sub:'Sunday',dose:'1'},
+   {id:'iron',name:'Iron',sub:'SmartFerrin B12 · Hemoglobin',dose:'1'}]},
+ {id:'breakfast',title:'After breakfast',time:'10:00',items:[
    {id:'foundation',name:'Foundation',sub:'Essentials',dose:'1'},
    {id:'omega3',name:'Omega 3',sub:'Inflammation',dose:'3'},
    {id:'d3k2',name:'Vitamin D3 & K2',sub:'Bones / Immunity',dose:'1'},
-   {id:'creatine',name:'Creatine',sub:'Energy',dose:'—'}]},
+   {id:'creatine',name:'Creatine',sub:'Energy',dose:'10 g'}]},
  {id:'training',title:'Daytime / post-workout',time:'18:30',items:[
    {id:'mg-taurate',name:'Mg Complex / Taurate',sub:'Muscles',dose:'1–2'}]},
- {id:'evening',title:'Evening, before sleep',time:'22:00',items:[
+ {id:'evening',title:'Evening, before sleep',time:'21:30',items:[
    {id:'mg-bisglycinate',name:'Mg Bisglycinate',sub:'Recovery',dose:'2'},
    {id:'l-threonate',name:'L-Threonate',sub:'Hansen',dose:'1 g'},
    {id:'glycine',name:'Glycine',sub:'Recovery / Cognitive',dose:'1 g'},
@@ -460,7 +462,7 @@ let importInfo='';
 /* ---------- LOCAL PERSISTENCE ----------
    Saves to this device's browser storage. Sandboxed previews block it,
    so every call degrades quietly to in-memory instead of throwing. */
-const DB_KEY='zeus.protocol.v1';
+const DB_KEY='zeus.protocol.v2';
 let canPersist=true, lastSaveOk=null;
 
 function saveAll(){
@@ -626,6 +628,18 @@ function marks(store){ const k=dk(); if(!store[k]) store[k]={}; return store[k];
 function optMarks(d){ const k=key(d||viewDate); if(!optOn[k]) optOn[k]={}; return optOn[k]; }
 const isOptActive=(r,d)=>!r.optional || !!optMarks(d)[r.id];
 const activeRoutinesOn=d=>routinesOn(d).filter(r=>isOptActive(r,d));
+function streakFor(id,from){
+  let d=new Date(from||viewDate); d.setHours(0,0,0,0);
+  if(!(state[key(d)]||{})[id]) d.setDate(d.getDate()-1);   // heute offen -> ab gestern zählen
+  let n=0;
+  while((state[key(d)]||{})[id]){ n++; d.setDate(d.getDate()-1); if(n>3650) break; }
+  return n;
+}
+const streakPill=r=>{
+  if(!r.streak) return '';
+  const n=streakFor(r.id);
+  return `<span class="streak-pill${n?'':' zero'}">${n?'🔥 '+n+(n===1?' day':' days'):'no streak yet'}</span>`;
+};
 function toggleOpt(id){ const m=optMarks(); m[id]=!m[id]; if(!m[id]) delete marks(state)[id]; render(); }
 const hhmm=d=>pad(d.getHours())+':'+pad(d.getMinutes());
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -804,7 +818,7 @@ function renderRoutine(c){
       <div class="rbody">
         <div class="rtitle">${esc(r.title)}</div>
         <div class="rmeta"><span class="tag ${r.cat}">${CATS[r.cat]}</span>
-          <span>${r.time} · ${r.dur} min</span>${r.date?'<span class="tag once">Single</span>':''}${pill}</div>
+          <span>${r.time} · ${r.dur} min</span>${r.date?'<span class="tag once">Single</span>':''}${pill}${streakPill(r)}</div>
       </div>
       <div class="acts">
         <button class="ico edit" data-edit="${r.id}" aria-label="Edit">✎</button>
@@ -881,7 +895,7 @@ function renderAgenda(c){
       row.innerHTML=`<span class="ag-time">${r.time}<small>${r.dur} min</small></span>
         <div class="check ${done?'on':''}${active?'':' plus'}" data-${active?'id':'opt'}="${r.id}"></div>
         <div class="rbody"><div class="rtitle">${esc(r.title)}</div>
-          <div class="rmeta"><span class="tag ${r.cat}">${CATS[r.cat]}</span>${pill}</div></div>
+          <div class="rmeta"><span class="tag ${r.cat}">${CATS[r.cat]}</span>${pill}${streakPill(r)}</div></div>
         <div class="acts"><button class="ico edit" data-edit="${r.id}">✎</button></div>`;
     } else if(a.kind==='supp'){
       const b=a.ref, tot=b.items.length, dn=b.items.filter(i=>ms[i.id]).length, all=dn===tot;
