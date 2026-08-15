@@ -400,7 +400,7 @@
 const DOW=['S','M','T','W','T','F','S'];
 const CATS={all:'All',health:'Health',sport:'Sport',mental:'Mental',planning:'Planning'};
 
-let ROUTINES=[
+const DEFAULT_ROUTINES=[
  {id:'morning-walk',title:'Morning walk',time:'06:45',dur:15,cat:'health'},
  {id:'plan-am',title:'Morning planning',time:'07:15',dur:15,cat:'planning'},
  {id:'teeth',title:'Brush teeth before eating',time:'07:30',dur:5,cat:'health'},
@@ -415,7 +415,7 @@ let ROUTINES=[
  {id:'sleep',title:'Sleep (sleep position)',time:'22:30',dur:1,cat:'health'}
 ];
 
-let SUPP_BLOCKS=[
+const DEFAULT_SUPPS=[
  {id:'fasted',title:'Morning, fasted',time:'07:00',wait:'Wait 20–30 min before breakfast',items:[
    {id:'gut',name:'Gut',sub:'Sunday',dose:'1'},
    {id:'iron',name:'Iron',sub:'SmartFerrin B12 · Hemoglobin',dose:'1'}]},
@@ -432,6 +432,12 @@ let SUPP_BLOCKS=[
    {id:'glycine',name:'Glycine',sub:'Recovery / Cognitive',dose:'1 g'},
    {id:'ashwagandha',name:'Ashwagandha',sub:'optional',dose:'2'}]}
 ];
+
+const cloneR=r=>({...r, days:r.days?[...r.days]:undefined});
+let ROUTINES=DEFAULT_ROUTINES.map(cloneR);
+let SUPP_BLOCKS=JSON.parse(JSON.stringify(DEFAULT_SUPPS));
+let seenDefaults=[];   // ids already reconciled against saved data
+
 
 /* ======================================================================
    CALENDAR SUBSCRIPTION  —  read-only iCal feed.
@@ -495,7 +501,7 @@ function saveAll(){
   if(!canPersist) return;
   try{
     localStorage.setItem(DB_KEY, JSON.stringify({
-      v:1, ROUTINES, SUPP_BLOCKS, state, suppState, optOn, PANELS,
+      v:2, ROUTINES, SUPP_BLOCKS, state, suppState, optOn, PANELS, seenDefaults,
       IMPORTED: IMPORTED.map(e=>({...e,start:e.start.toISOString()})),
       SUB_URL, SUB_PROXY, SUB_MINUTES
     }));
@@ -505,10 +511,12 @@ function saveAll(){
 function loadAll(){
   try{
     const raw=localStorage.getItem(DB_KEY);
-    if(!raw){ lastSaveOk=true; return; }
+    if(!raw){ mergeNewDefaults(); lastSaveOk=true; return; }
     const d=JSON.parse(raw);
     if(Array.isArray(d.ROUTINES)&&d.ROUTINES.length) ROUTINES=d.ROUTINES;
     if(Array.isArray(d.SUPP_BLOCKS)&&d.SUPP_BLOCKS.length) SUPP_BLOCKS=d.SUPP_BLOCKS;
+    seenDefaults=Array.isArray(d.seenDefaults)?d.seenDefaults:[];
+    mergeNewDefaults();
     state=d.state||{}; suppState=d.suppState||{}; optOn=d.optOn||{};
     IMPORTED=(d.IMPORTED||[]).map(e=>({...e,start:new Date(e.start)}));
     PANELS=d.PANELS||[];
@@ -516,6 +524,37 @@ function loadAll(){
     lastSaveOk=true;
   }catch(e){ canPersist=false; lastSaveOk=false; }
 }
+/* Adds defaults that shipped in a newer version, without touching the
+   user's own edits. Anything already reconciled once stays deleted if
+   the user removed it on purpose. */
+function mergeNewDefaults(){
+  let added=0;
+  DEFAULT_ROUTINES.forEach(def=>{
+    if(seenDefaults.includes('r:'+def.id)) return;
+    if(!ROUTINES.some(r=>r.id===def.id)){ ROUTINES.push(cloneR(def)); added++; }
+  });
+  DEFAULT_SUPPS.forEach(defB=>{
+    const key='b:'+defB.id;
+    let blk=SUPP_BLOCKS.find(b=>b.id===defB.id);
+    if(!blk){
+      if(!seenDefaults.includes(key)){ SUPP_BLOCKS.push(JSON.parse(JSON.stringify(defB))); added++; }
+      return;
+    }
+    defB.items.forEach(it=>{
+      const ik='s:'+defB.id+':'+it.id;
+      if(seenDefaults.includes(ik)) return;
+      if(!blk.items.some(x=>x.id===it.id)){ blk.items.push({...it}); added++; }
+    });
+  });
+  seenDefaults=[
+    ...DEFAULT_ROUTINES.map(r=>'r:'+r.id),
+    ...DEFAULT_SUPPS.map(b=>'b:'+b.id),
+    ...DEFAULT_SUPPS.flatMap(b=>b.items.map(i=>'s:'+b.id+':'+i.id))
+  ];
+  if(added) console.log('Merged '+added+' new default item(s).');
+  return added;
+}
+
 function wipeAll(){
   if(!confirm('Erase all saved routines, supplements and history on this device?')) return;
   try{ localStorage.removeItem(DB_KEY); }catch(e){}
