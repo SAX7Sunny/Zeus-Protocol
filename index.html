@@ -264,7 +264,17 @@
   .field input,.field select { width:100%; padding:12px 14px; background:var(--bg); border:1px solid var(--line);
     border-radius:10px; color:var(--ink); font-size:15px; font-family:inherit; }
   .field input::placeholder { color:var(--faint); }
-  .row2 { display:flex; gap:12px; } .row2 .field { flex:1; }
+  /* min-width:0 lets flex children shrink; without it the time and number
+     inputs keep their intrinsic width and overlap on narrow screens. */
+  .row2 { display:flex; gap:10px; align-items:flex-start; }
+  .row2 .field { flex:1 1 0; min-width:0; }
+  .row2 .field label { font-size:11px; letter-spacing:.03em; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+  .row2 .field input, .row2 .field select { width:100%; min-width:0; padding:11px 10px; font-size:14px; }
+  input[type="time"], input[type="date"], input[type="number"] {
+    -webkit-appearance:none; appearance:none; min-width:0; max-width:100%; }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
   .seg { display:flex; gap:8px; margin-bottom:14px; }
   .seg button { flex:1; padding:11px; border-radius:10px; border:1px solid var(--line); background:var(--bg);
     color:var(--muted); font-size:14px; font-weight:600; }
@@ -323,7 +333,7 @@
     <div id="routineFields">
       <div class="row2">
         <div class="field"><label>Time</label><input id="f-time" type="time" value="08:00"></div>
-        <div class="field"><label>Duration (min)</label><input id="f-dur" type="number" value="15" min="1"></div>
+        <div class="field"><label>Duration · min</label><input id="f-dur" type="number" value="15" min="1"></div>
       </div>
       <div class="field"><label>Category</label>
         <select id="f-cat">
@@ -349,7 +359,7 @@
       <div class="field"><label>Date</label><input id="e-date" type="date"></div>
       <div class="row2">
         <div class="field"><label>Start</label><input id="e-time" type="time" value="09:00"></div>
-        <div class="field"><label>Duration (min)</label><input id="e-dur" type="number" value="60" min="1"></div>
+        <div class="field"><label>Duration · min</label><input id="e-dur" type="number" value="60" min="1"></div>
       </div>
       <div class="field"><label>Notes (optional)</label><input id="e-note" placeholder="Location, agenda, …"></div>
       <div class="note" id="e-target" style="margin:0">Saves to your Google Calendar.</div>
