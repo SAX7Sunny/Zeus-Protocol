@@ -245,6 +245,20 @@
     color:var(--clay); background:var(--clay-soft); padding:3px 8px; border-radius:6px; }
   .streak-pill.zero { color:var(--faint); background:rgba(236,231,214,.07); font-weight:600; }
 
+
+  .eatbar { margin-top:12px; display:none; }
+  .eatbar.show { display:block; }
+  .eat-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; gap:10px; }
+  .eat-label { font-size:11px; font-weight:800; letter-spacing:.11em; text-transform:uppercase; }
+  .eat-left { font-size:12.5px; font-weight:700; white-space:nowrap; }
+  .eat-sub { font-size:11px; color:var(--faint); font-weight:600; }
+  .eat-track { height:6px; background:rgba(236,231,214,.10); border-radius:4px; overflow:hidden; }
+  .eat-fill { height:100%; border-radius:4px; transition:width .5s ease; }
+  .eat-eating .eat-label, .eat-eating .eat-left { color:var(--moss); }
+  .eat-eating .eat-fill { background:var(--moss); }
+  .eat-fasting .eat-label, .eat-fasting .eat-left { color:var(--rose); }
+  .eat-fasting .eat-fill { background:var(--rose); }
+
   .fab { position:fixed; right:calc(50% - 320px + 18px); bottom:calc(84px + env(safe-area-inset-bottom));
     width:56px; height:56px; border-radius:50%; background:var(--frost); color:var(--bg); border:none;
     font-size:30px; font-weight:300; line-height:1; box-shadow:0 6px 20px rgba(0,0,0,.4); z-index:20; }
@@ -307,6 +321,7 @@
     <div class="progress-head"><span class="pct" id="pct">0%</span><span class="pct-sub">done</span></div>
     <div class="progress-track"><div class="progress-bar" id="bar"></div></div>
   </div>
+  <div class="eatbar" id="eatbar"></div>
   <div class="tabs">
     <button class="tab active" id="tab-agenda" onclick="setTab('agenda')">Agenda</button>
     <button class="tab" id="tab-routine" onclick="setTab('routine')">Routine</button>
@@ -389,6 +404,7 @@ let ROUTINES=[
  {id:'morning-walk',title:'Morning walk',time:'06:45',dur:15,cat:'health'},
  {id:'plan-am',title:'Morning planning',time:'07:15',dur:15,cat:'planning'},
  {id:'teeth',title:'Brush teeth before eating',time:'07:30',dur:5,cat:'health'},
+ {id:'breakfast-meal',title:'Breakfast',time:'09:00',dur:60,cat:'health'},
  {id:'stretching',title:'Stretching',time:'18:30',dur:15,cat:'health',optional:true},
  {id:'workout',title:'Workout (tennis / run / HIIT)',time:'17:30',dur:60,cat:'sport',optional:true},
  {id:'base-training',title:'Base training - Zone 2',time:'18:45',dur:45,cat:'sport',optional:true},
@@ -638,6 +654,45 @@ function marks(store){ const k=dk(); if(!store[k]) store[k]={}; return store[k];
 function optMarks(d){ const k=key(d||viewDate); if(!optOn[k]) optOn[k]={}; return optOn[k]; }
 const isOptActive=(r,d)=>!r.optional || !!optMarks(d)[r.id];
 const activeRoutinesOn=d=>routinesOn(d).filter(r=>isOptActive(r,d));
+/* ---------- EATING WINDOW ----------
+   Change these two numbers to move the window. */
+const EAT_START=9, EAT_END=17;
+
+function eatingState(now){
+  const h=now.getHours()+now.getMinutes()/60;
+  if(h>=EAT_START && h<EAT_END){
+    const span=EAT_END-EAT_START;
+    return {mode:'eating', left:EAT_END-h, pct:(h-EAT_START)/span*100};
+  }
+  const total=(24-EAT_END)+EAT_START;                 // Fastenfenster in Stunden
+  const done=h>=EAT_END ? h-EAT_END : (24-EAT_END)+h; // schon gefastet
+  return {mode:'fasting', left:total-done, pct:done/total*100};
+}
+const hm=x=>{
+  let h=Math.floor(x), m=Math.round((x-h)*60);
+  if(m===60){ h++; m=0; }
+  return h>0 ? h+' h '+m+' min' : m+' min';
+};
+function renderEatWindow(){
+  const box=document.getElementById('eatbar');
+  if(!box) return;
+  const now=new Date();
+  const onToday=sameDay(viewDate,now);
+  const show=onToday && activeTab!=='cal' && activeTab!=='bio';
+  box.className='eatbar'+(show?' show ':' ')+(show?'':'');
+  if(!show){ box.innerHTML=''; return; }
+  const st=eatingState(now);
+  box.className='eatbar show '+(st.mode==='eating'?'eat-eating':'eat-fasting');
+  const pad2=n=>String(n).padStart(2,'0');
+  box.innerHTML=`
+    <div class="eat-head">
+      <span class="eat-label">${st.mode==='eating'?'Eating window':'Fasting'}</span>
+      <span class="eat-left">${hm(st.left)} ${st.mode==='eating'?'left':'until '+pad2(EAT_START)+':00'}</span>
+    </div>
+    <div class="eat-track"><div class="eat-fill" style="width:${Math.max(0,Math.min(100,st.pct))}%"></div></div>
+    <div class="eat-sub">${pad2(EAT_START)}:00 – ${pad2(EAT_END)}:00</div>`;
+}
+
 function streakFor(id,from){
   let d=new Date(from||viewDate); d.setHours(0,0,0,0);
   if(!(state[key(d)]||{})[id]) d.setDate(d.getDate()-1);   // heute offen -> ab gestern zählen
@@ -808,7 +863,7 @@ function render(){
   else if(activeTab==='supps') renderSupps(c);
   else if(activeTab==='cal') renderCalendar(c);
   else renderBio(c);
-  renderProgress(); renderFooter(); saveAll();
+  renderProgress(); renderEatWindow(); renderFooter(); saveAll();
 }
 
 function renderRoutine(c){
@@ -1350,6 +1405,7 @@ function exportEverything(){
 
 loadAll();
 render();
+setInterval(renderEatWindow,60000);
 if(SUB_URL) subFetch(true);
 </script>
 </body>
