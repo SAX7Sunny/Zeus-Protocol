@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#14201d">
+<meta name="supported-color-schemes" content="dark">
+<title>Daily Routine</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg:#14201d; --surface:#1b2a26; --ink:#ece7d6;
+    --muted:rgba(236,231,214,0.58); --faint:rgba(236,231,214,0.30);
+    --line:rgba(236,231,214,0.14);
+    --frost:#6fc4d8; --frost-soft:rgba(111,196,216,0.16);
+    --moss:#8fce8a; --clay:#e89b6c; --clay-soft:rgba(232,155,108,0.16);
+    --amber:#d4bd6e; --rose:#e88a8a; --rose-soft:rgba(232,138,138,0.14);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html { background-color:#14201d; min-height:100%; }
+  html,body { background-color:#14201d; background-color:var(--bg);
+    color:#ece7d6; color:var(--ink); }
+  body { min-height:100vh; min-height:100dvh; overscroll-behavior-y:none;
+    -webkit-text-size-adjust:100%; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    max-width:640px; margin:0 auto; min-height:100vh; }
+
+  header { padding:18px 20px 0; border-bottom:1px solid var(--line);
+    position:sticky; top:0; background:var(--bg); z-index:10; }
+
+  .brandrow { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+  .brandtext { min-width:0; }
+  .logo {
+    flex-shrink:0; margin-top:2px;
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:23px; font-weight:700; letter-spacing:.10em;
+    color:var(--ink); line-height:1;
+    padding:7px 11px 6px; border-radius:9px;
+    border:1px solid var(--line); background:var(--surface);
+  }
+  .eyebrow { font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--frost); font-weight:600; }
+  h1 { font-family:Georgia,"Times New Roman",serif; font-size:24px; font-weight:600; line-height:1.1; margin-top:6px; }
+
+  .daynav { display:flex; align-items:center; gap:10px; margin-top:8px; }
+  .daynav button { background:var(--surface); border:1px solid var(--line); color:var(--ink);
+    width:32px; height:32px; border-radius:9px; font-size:15px; flex-shrink:0; }
+  .daynav .dlabel { flex:1; font-size:14px; color:var(--muted); }
+  .daynav .today-btn { width:auto; padding:0 12px; font-size:12px; font-weight:600; color:var(--frost); }
+
+  .progress-wrap { margin-top:12px; }
+  .progress-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  .pct { font-family:Georgia,serif; font-size:22px; font-weight:600; color:var(--moss); }
+  .pct-sub { font-size:12px; color:var(--muted); }
+  .progress-track { height:6px; background:rgba(236,231,214,.10); border-radius:4px; overflow:hidden; }
+  .progress-bar { height:100%; width:0%; background:var(--moss); border-radius:4px; transition:width .4s ease; }
+
+  .tabs { display:flex; gap:0; margin-top:14px; width:100%; }
+  .tab { flex:1 1 0; min-width:0; padding:13px 1px; font-size:12.5px; font-weight:700;
+    background:none; border:none; color:var(--faint); border-bottom:2.5px solid transparent;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-0.01em; }
+  .tab.active { color:var(--ink); border-bottom-color:var(--frost); }
+  .tab:not(.active):active { color:var(--muted); }
+
+  .filters { display:flex; gap:8px; padding:14px 20px; overflow-x:auto; }
+  .chip { font-size:13px; padding:7px 14px; border-radius:20px; border:1px solid var(--line);
+    background:var(--surface); color:var(--ink); white-space:nowrap; font-weight:500; }
+  .chip.active { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+
+  main { padding:4px 14px 100px; }
+
+  .row { display:flex; align-items:center; gap:11px; padding:14px 6px; border-bottom:1px solid var(--line); }
+  .check { flex-shrink:0; width:26px; height:26px; border-radius:50%;
+    border:2px solid rgba(236,231,214,.35); display:grid; place-items:center; transition:all .2s; }
+  .check.on { background:var(--moss); border-color:var(--moss); }
+  .check.on::after { content:"✓"; color:var(--bg); font-size:15px; font-weight:800; }
+  .rbody { flex:1; min-width:0; }
+  .rtitle { font-size:15.5px; font-weight:600; line-height:1.3; }
+  .row.done .rtitle { text-decoration:line-through; opacity:.45; }
+  .rmeta { font-size:12.5px; color:var(--muted); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .tag { font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; font-weight:700; }
+  .tag.health{color:var(--frost);} .tag.sport{color:var(--clay);}
+  .tag.mental{color:var(--moss);} .tag.planning{color:var(--amber);}
+  .tag.imported{color:var(--frost);} .tag.once{color:var(--amber);}
+  .dose { flex-shrink:0; font-size:12.5px; font-weight:700; color:var(--clay);
+    background:var(--clay-soft); padding:4px 8px; border-radius:7px; }
+
+  .acts { display:flex; gap:5px; flex-shrink:0; }
+  .ico { width:32px; height:32px; border-radius:9px; border:1px solid var(--line);
+    background:var(--surface); color:var(--muted); font-size:14px; line-height:1; display:grid; place-items:center; }
+  .ico.edit { color:var(--frost); }
+  .ico.del  { color:var(--rose); }
+
+  .block { margin-top:20px; }
+  .block-head { display:flex; align-items:baseline; justify-content:space-between; padding:0 6px 8px; border-bottom:1px solid var(--line); }
+  .block-title { font-family:Georgia,serif; font-size:17.5px; font-weight:600; }
+  .block-time { font-size:12px; color:var(--frost); font-weight:600; background:var(--frost-soft);
+    border:none; padding:5px 10px; border-radius:7px; }
+  .wait-note { margin:12px 6px 0; padding:10px 14px; background:rgba(212,189,110,.12);
+    border-radius:10px; font-size:13px; color:var(--amber); font-weight:500; }
+
+  .note { margin:18px 6px 0; padding:14px 16px; border-radius:12px; background:var(--frost-soft);
+    font-size:12.5px; line-height:1.55; color:var(--frost); }
+  .note strong { color:var(--ink); }
+  .note.warn { background:rgba(212,189,110,.12); color:var(--amber); }
+
+  .import-zone { margin:12px 6px 0; padding:22px 18px; border:1.5px dashed rgba(111,196,216,.45);
+    border-radius:14px; text-align:center; background:rgba(111,196,216,.06); }
+  .import-zone h3 { font-family:Georgia,serif; font-size:17px; margin-bottom:5px; }
+  .import-zone p { font-size:12.5px; color:var(--muted); line-height:1.5; margin-bottom:14px; }
+  .import-btn { background:var(--frost); color:var(--bg); border:none; padding:12px 22px;
+    border-radius:11px; font-size:14.5px; font-weight:700; }
+  #fileInput { display:none; }
+  .import-status { margin-top:10px; font-size:12.5px; color:var(--moss); font-weight:600; }
+
+  .agenda-time { flex-shrink:0; width:52px; font-size:13px; font-weight:700; color:var(--frost); }
+  .day-sep { font-family:Georgia,serif; font-size:13px; color:var(--muted);
+    padding:16px 6px 6px; letter-spacing:.04em; text-transform:uppercase; }
+
+  .footer-bar { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:640px;
+    padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+    background:linear-gradient(to top,var(--bg) 72%,rgba(20,32,29,0)); display:flex; gap:9px; }
+  .btn-primary,.btn-ghost { flex:1; padding:14px 8px; border-radius:12px; font-size:14.5px; font-weight:600; border:none; }
+  .btn-primary { background:var(--ink); color:var(--bg); }
+  .btn-ghost { background:var(--surface); border:1px solid var(--line); color:var(--ink); }
+  .btn-danger { background:var(--rose-soft); color:var(--rose); border:none; padding:14px;
+    border-radius:12px; font-size:14.5px; font-weight:600; }
+  .empty { text-align:center; color:var(--faint); padding:44px 20px; font-size:15px; line-height:1.6; }
+
+
+  /* Month grid */
+  .month { margin-bottom:26px; }
+  .mhead { font-family:Georgia,serif; font-size:19px; font-weight:600; padding:6px 6px 10px;
+    position:sticky; top:0; background:var(--bg); z-index:5; }
+  .mhead span { color:var(--muted); font-weight:400; font-size:15px; }
+  .wdays { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; padding:0 2px 6px; }
+  .wdays div { text-align:center; font-size:11px; font-weight:700; color:var(--faint);
+    text-transform:uppercase; letter-spacing:.05em; }
+  .mgrid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; padding:0 2px; }
+  .cell { aspect-ratio:1/1.05; border-radius:10px; background:none; border:none; padding:4px 0 0;
+    display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--ink); }
+  .cell.pad { visibility:hidden; }
+  .cell .num { font-size:14.5px; font-weight:600; width:28px; height:28px; border-radius:50%;
+    display:grid; place-items:center; }
+  .cell.today .num { background:var(--frost); color:var(--bg); font-weight:800; }
+  .cell.sel .num { box-shadow:inset 0 0 0 2px var(--frost); }
+  .cell.today.sel .num { box-shadow:inset 0 0 0 2px var(--ink); }
+  .cell.wknd .num { color:var(--muted); }
+  .dots { display:flex; gap:3px; height:5px; }
+  .dot { width:5px; height:5px; border-radius:50%; }
+  .dot.cal { background:var(--frost); }
+  .dot.once { background:var(--amber); }
+  .dot.sport { background:var(--clay); }
+  .month-hint { text-align:center; color:var(--faint); font-size:12.5px; padding:6px 0 26px; }
+
+  /* Agenda */
+  .ag-time { flex-shrink:0; width:50px; font-size:13px; font-weight:700; color:var(--frost); line-height:1.3; }
+  .ag-time small { display:block; font-size:10.5px; color:var(--faint); font-weight:600; }
+  .now-line { display:flex; align-items:center; gap:8px; padding:6px 6px; }
+  .now-line .lbl { font-size:10.5px; font-weight:800; color:var(--rose); letter-spacing:.08em; }
+  .now-line .ln { flex:1; height:1.5px; background:var(--rose); opacity:.7; }
+  .ag-sub { font-size:12px; color:var(--faint); margin-top:2px; }
+  .compact-import { display:flex; gap:9px; align-items:center; margin:10px 6px 16px;
+    padding:12px 14px; border:1px dashed rgba(111,196,216,.4); border-radius:12px;
+    background:rgba(111,196,216,.05); }
+  .compact-import .ci-txt { flex:1; font-size:12.5px; color:var(--muted); line-height:1.4; }
+  .compact-import button { background:var(--frost); color:var(--bg); border:none; padding:10px 15px;
+    border-radius:9px; font-size:13px; font-weight:700; flex-shrink:0; }
+
+
+  .gcard { margin:10px 6px 16px; padding:16px; border-radius:14px; background:var(--surface);
+    border:1px solid var(--line); }
+  .gcard.on { border-color:rgba(143,206,138,.45); background:rgba(143,206,138,.07); }
+  .gtop { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+  .gdot { width:9px; height:9px; border-radius:50%; background:var(--faint); flex-shrink:0; }
+  .gdot.live { background:var(--moss); box-shadow:0 0 0 4px rgba(143,206,138,.18); }
+  .gdot.err { background:var(--rose); }
+  .gtitle { font-family:Georgia,serif; font-size:16px; font-weight:600; flex:1; }
+  .gsub { font-size:12.5px; color:var(--muted); line-height:1.5; margin-bottom:12px; }
+  .gsub b { color:var(--ink); font-weight:600; }
+  .grow { display:flex; gap:8px; }
+  .gbtn { flex:1; padding:11px; border-radius:10px; border:none; font-size:13.5px; font-weight:700; }
+  .gbtn.pri { background:var(--frost); color:var(--bg); }
+  .gbtn.sec { background:var(--bg); color:var(--muted); border:1px solid var(--line); }
+  .gid-input { width:100%; padding:11px 13px; background:var(--bg); border:1px solid var(--line);
+    border-radius:10px; color:var(--ink); font-size:12.5px; font-family:ui-monospace,Menlo,monospace;
+    margin-bottom:9px; }
+  details.help { margin-top:12px; }
+  details.help summary { font-size:12.5px; color:var(--frost); font-weight:600; cursor:pointer; }
+  details.help ol { margin:10px 0 0 18px; font-size:12.5px; color:var(--muted); line-height:1.7; }
+  details.help code { background:var(--bg); padding:1px 5px; border-radius:4px;
+    font-size:11.5px; color:var(--amber); }
+  .tag.google { color:var(--moss); }
+
+
+  .row.opt-off { opacity:.40; }
+  .row.opt-off .check { border-style:dashed; border-color:rgba(236,231,214,.45); }
+  .check.plus::after { content:"+"; color:var(--muted); font-size:18px; font-weight:600; line-height:1; }
+  .opt-pill { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--amber); background:rgba(212,189,110,.15); border:none;
+    padding:3px 8px; border-radius:6px; }
+  .opt-pill.off { color:var(--muted); background:rgba(236,231,214,.08); }
+
+
+  .biocard { margin:10px 6px 12px; padding:15px 16px; border-radius:14px;
+    background:var(--surface); border:1px solid var(--line); }
+  .biotop { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .brandname { font-size:17px; font-weight:800; letter-spacing:.02em; }
+  .brand-whoop { color:#00F19F; }
+  .brand-health { color:#FF2D55; }
+  .brand-eight { color:#FFFFFF; letter-spacing:.06em; }
+  .connect-btn { flex-shrink:0; padding:9px 15px; border-radius:9px; border:1px solid var(--line);
+    background:var(--bg); color:var(--muted); font-size:13px; font-weight:700; }
+  .biostatus { font-size:12.5px; color:var(--muted); line-height:1.5; margin-top:9px; }
+  .biostatus b { color:var(--ink); }
+  .beta-pill { font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--amber); background:rgba(212,189,110,.15); padding:3px 7px; border-radius:5px; }
+
+  .upload-zone { margin:16px 6px 10px; padding:20px 18px; border:1.5px dashed rgba(111,196,216,.45);
+    border-radius:14px; text-align:center; background:rgba(111,196,216,.06); }
+  .upload-zone h3 { font-family:Georgia,serif; font-size:17px; margin-bottom:5px; }
+  .upload-zone p { font-size:12.5px; color:var(--muted); line-height:1.5; margin-bottom:14px; }
+
+  .mk { display:flex; align-items:center; gap:10px; padding:12px 6px; border-bottom:1px solid var(--line); }
+  .mk-name { flex:1; min-width:0; font-size:14.5px; font-weight:600; }
+  .mk-sub { font-size:11.5px; color:var(--faint); margin-top:2px; }
+  .mk-val { flex-shrink:0; font-size:14.5px; font-weight:700; text-align:right; min-width:74px; }
+  .mk-val small { display:block; font-size:10.5px; color:var(--faint); font-weight:600; }
+  .mk-delta { flex-shrink:0; font-size:12px; font-weight:700; min-width:62px; text-align:right; }
+  .up { color:var(--clay); } .down { color:var(--frost); } .flat { color:var(--faint); }
+  .inrange { color:var(--moss); } .outrange { color:var(--amber); }
+  .panel-row { display:flex; align-items:center; gap:10px; padding:11px 6px; border-bottom:1px solid var(--line); }
+  .panel-date { flex:1; font-size:13.5px; font-weight:600; }
+  .panel-meta { font-size:11.5px; color:var(--faint); margin-top:2px; }
+
+  .fab { position:fixed; right:calc(50% - 320px + 18px); bottom:calc(84px + env(safe-area-inset-bottom));
+    width:56px; height:56px; border-radius:50%; background:var(--frost); color:var(--bg); border:none;
+    font-size:30px; font-weight:300; line-height:1; box-shadow:0 6px 20px rgba(0,0,0,.4); z-index:20; }
+  @media (max-width:660px){ .fab{ right:18px; } }
+
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.62); z-index:30; display:none;
+    align-items:flex-end; justify-content:center; }
+  .overlay.open { display:flex; }
+  .sheet { width:100%; max-width:640px; background:var(--surface); border-radius:20px 20px 0 0;
+    padding:22px 20px calc(22px + env(safe-area-inset-bottom)); max-height:90vh; overflow-y:auto; }
+  .sheet h2 { font-family:Georgia,serif; font-size:20px; margin-bottom:4px; }
+  .sheet p.hint { font-size:13px; color:var(--muted); margin-bottom:16px; }
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:12px; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:6px; font-weight:600; }
+  input,select,textarea,button { color-scheme:dark; }
+  .field input,.field select { width:100%; padding:12px 14px; background:var(--bg); border:1px solid var(--line);
+    border-radius:10px; color:var(--ink); font-size:15px; font-family:inherit; }
+  .field input::placeholder { color:var(--faint); }
+  .row2 { display:flex; gap:12px; } .row2 .field { flex:1; }
+  .seg { display:flex; gap:8px; margin-bottom:14px; }
+  .seg button { flex:1; padding:11px; border-radius:10px; border:1px solid var(--line); background:var(--bg);
+    color:var(--muted); font-size:14px; font-weight:600; }
+  .seg button.on { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  .dows { display:flex; gap:6px; }
+  .dows button { flex:1; aspect-ratio:1; border-radius:50%; border:1px solid var(--line); background:var(--bg);
+    color:var(--muted); font-size:13px; font-weight:600; }
+  .dows button.on { background:var(--frost); color:var(--bg); border-color:var(--frost); }
+  .sheet-actions { display:flex; gap:10px; margin-top:20px; }
+  .link-btn { width:100%; margin-top:6px; padding:12px; border-radius:10px; background:var(--frost-soft);
+    color:var(--frost); border:none; font-size:14px; font-weight:600; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brandrow">
+    <div class="brandtext">
+      <div class="eyebrow">ZEUS Protocol</div>
+      <h1 id="pageTitle">Agenda</h1>
+    </div>
+    <div class="logo" aria-label="ZEVS">Z&#931;VS</div>
+  </div>
+  <div class="daynav">
+    <button onclick="shiftDay(-1)">‹</button>
+    <span class="dlabel" id="date"></span>
+    <button class="today-btn" onclick="goToday()">Today</button>
+    <button onclick="shiftDay(1)">›</button>
+  </div>
+  <div class="progress-wrap" id="progWrap">
+    <div class="progress-head"><span class="pct" id="pct">0%</span><span class="pct-sub">done</span></div>
+    <div class="progress-track"><div class="progress-bar" id="bar"></div></div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" id="tab-agenda" onclick="setTab('agenda')">Agenda</button>
+    <button class="tab" id="tab-routine" onclick="setTab('routine')">Routine</button>
+    <button class="tab" id="tab-supps" onclick="setTab('supps')">Supps</button>
+    <button class="tab" id="tab-cal" onclick="setTab('cal')">Calendar</button>
+    <button class="tab" id="tab-bio" onclick="setTab('bio')">Bio</button>
+  </div>
+</header>
+
+<div class="filters" id="filters"></div>
+<main id="content"></main>
+<input type="file" id="fileInput" accept=".ics,text/calendar">
+<input type="file" id="pdfInput" accept="application/pdf,.pdf" style="display:none">
+
+<button class="fab" onclick="openSheet('add')" aria-label="Add">+</button>
+<div class="footer-bar" id="footer"></div>
+
+<div class="overlay" id="overlay">
+  <div class="sheet">
+    <h2 id="sheetTitle">Add routine</h2>
+    <p class="hint" id="sheetHint">Create a new item.</p>
+    <div class="field"><label>Name</label><input id="f-name" placeholder="e.g. Meditation"></div>
+
+    <div id="routineFields">
+      <div class="row2">
+        <div class="field"><label>Time</label><input id="f-time" type="time" value="08:00"></div>
+        <div class="field"><label>Duration (min)</label><input id="f-dur" type="number" value="15" min="1"></div>
+      </div>
+      <div class="field"><label>Category</label>
+        <select id="f-cat">
+          <option value="health">Health</option><option value="sport">Sport</option>
+          <option value="mental">Mental</option><option value="planning">Planning</option>
+        </select></div>
+      <label style="display:block;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600;">Kind</label>
+      <div class="seg">
+        <button id="seg-std" onclick="setKind(false)">Standard</button>
+        <button id="seg-opt" onclick="setKind(true)">Optional</button>
+      </div>
+      <label style="display:block;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600;">Schedule</label>
+      <div class="seg">
+        <button id="seg-rep" onclick="setMode('repeat')">Repeats</button>
+        <button id="seg-once" onclick="setMode('once')">Single date</button>
+      </div>
+      <div id="repeatBox"><div class="dows" id="dows"></div></div>
+      <div id="onceBox" style="display:none"><div class="field"><input id="f-date" type="date"></div></div>
+      <button class="link-btn" id="calFromSheet" onclick="calFromSheet()">Add this to Apple Calendar</button>
+    </div>
+
+    <div id="eventFields" style="display:none">
+      <div class="field"><label>Date</label><input id="e-date" type="date"></div>
+      <div class="row2">
+        <div class="field"><label>Start</label><input id="e-time" type="time" value="09:00"></div>
+        <div class="field"><label>Duration (min)</label><input id="e-dur" type="number" value="60" min="1"></div>
+      </div>
+      <div class="field"><label>Notes (optional)</label><input id="e-note" placeholder="Location, agenda, …"></div>
+      <div class="note" id="e-target" style="margin:0">Saves to your Google Calendar.</div>
+    </div>
+
+    <div id="suppFields" style="display:none">
+      <div class="row2">
+        <div class="field"><label>Brand / purpose</label><input id="f-sub" placeholder="e.g. Essentials"></div>
+        <div class="field"><label>Dose</label><input id="f-dose" placeholder="e.g. 2"></div>
+      </div>
+      <div class="field"><label>Time block</label><select id="f-block"></select></div>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="btn-ghost" onclick="closeSheet()">Cancel</button>
+      <button class="btn-danger" id="deleteBtn" style="display:none" onclick="deleteCurrent()">Delete</button>
+      <button class="btn-primary" id="saveBtn" onclick="saveItem()">Add</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DOW=['S','M','T','W','T','F','S'];
+const CATS={all:'All',health:'Health',sport:'Sport',mental:'Mental',planning:'Planning'};
+
+let ROUTINES=[
+ {id:'plan-am',title:'Morning planning ping',time:'07:30',dur:15,cat:'planning'},
+ {id:'teeth',title:'Brush teeth before eating',time:'07:45',dur:5,cat:'health'},
+ {id:'workout',title:'Workout (tennis / run / HIIT)',time:'17:30',dur:60,cat:'sport'},
+ {id:'base-training',title:'Base training',time:'18:45',dur:45,cat:'sport'},
+ {id:'ice-bath',title:'Ice bath (6–7 °C)',time:'19:30',dur:15,cat:'health',days:[1,3,5]},
+ {id:'snus-streak',title:'Log snus-free streak',time:'20:30',dur:5,cat:'mental'},
+ {id:'plan-pm',title:'Evening planning ping',time:'20:30',dur:15,cat:'planning'},
+ {id:'goals-checkin',title:'Goals 2026 check-in',time:'20:30',dur:20,cat:'planning',days:[0]},
+ {id:'blue-light',title:'Blue-light glasses on',time:'21:00',dur:2,cat:'health'},
+ {id:'pushups',title:'Push Ups',time:'18:00',dur:10,cat:'sport',optional:true},
+ {id:'stretching',title:'Stretching',time:'21:30',dur:15,cat:'health',optional:true},
+ {id:'winddown',title:'Wind-down',time:'22:00',dur:30,cat:'mental'},
+ {id:'sleep',title:'Sleep (sleep position)',time:'22:30',dur:1,cat:'health'}
+];
+
+let SUPP_BLOCKS=[
+ {id:'fasted',title:'Morning, fasted',time:'07:15',wait:'Wait 20–30 min before breakfast',items:[
+   {id:'gut',name:'Gut',sub:'Biogena / Sunday',dose:'2/1'},
+   {id:'iron',name:'Iron',sub:'SmartFerrin B12 · Hemoglobin',dose:'1'},
+   {id:'berberine',name:'Berberine',sub:'Metabolism',dose:'1 g'}]},
+ {id:'breakfast',title:'After breakfast',time:'07:50',items:[
+   {id:'foundation',name:'Foundation',sub:'Essentials',dose:'1'},
+   {id:'omega3',name:'Omega 3',sub:'Inflammation',dose:'3'},
+   {id:'d3k2',name:'Vitamin D3 & K2',sub:'Bones / Immunity',dose:'1'},
+   {id:'creatine',name:'Creatine',sub:'Energy',dose:'—'}]},
+ {id:'training',title:'Daytime / post-workout',time:'18:30',items:[
+   {id:'mg-taurate',name:'Mg Complex / Taurate',sub:'Muscles',dose:'1–2'}]},
+ {id:'evening',title:'Evening, before sleep',time:'22:00',items:[
+   {id:'mg-bisglycinate',name:'Mg Bisglycinate',sub:'Recovery',dose:'2'},
+   {id:'l-threonate',name:'L-Threonate',sub:'Hansen',dose:'1 g'},
+   {id:'glycine',name:'Glycine',sub:'Recovery / Cognitive',dose:'1 g'},
+   {id:'ashwagandha',name:'Ashwagandha',sub:'optional',dose:'2'}]}
+];
+
+/* ======================================================================
+   CALENDAR SUBSCRIPTION  —  read-only iCal feed.
+   Browsers cannot fetch Google/iCloud .ics directly (no CORS headers),
+   so the URL is routed through a proxy you control.
+   ====================================================================== */
+let SUB_URL='', SUB_PROXY='', SUB_MINUTES=15;
+let subEvents=[], subStatus='idle', subMsg='', subLast=null, subTimer=null;
+
+function proxied(url){
+  let u=url.trim().replace(/^webcal:\/\//i,'https://');
+  if(!SUB_PROXY) return u;
+  const p=SUB_PROXY.trim();
+  return p.includes('{url}') ? p.replace('{url}',encodeURIComponent(u))
+       : p.replace(/\/$/,'')+'/'+u;
+}
+
+async function subFetch(quiet){
+  if(!SUB_URL){ subStatus='error'; subMsg='Paste your calendar URL first.'; return render(); }
+  if(!quiet){ subStatus='loading'; subMsg='Fetching calendar…'; render(); }
+  try{
+    const r=await fetch(proxied(SUB_URL),{headers:{'Accept':'text/calendar'}});
+    if(!r.ok) throw new Error('Server replied '+r.status+'. Check the URL and your proxy.');
+    const txt=await r.text();
+    if(!/BEGIN:VCALENDAR/i.test(txt)) throw new Error('That URL did not return an iCal feed.');
+    subEvents=parseICS(txt).map(e=>({...e,src:'sub'}));
+    subStatus='live'; subMsg=''; subLast=new Date();
+    if(subTimer) clearInterval(subTimer);
+    subTimer=setInterval(()=>subFetch(true),Math.max(5,SUB_MINUTES)*60000);
+    (quiet&&activeTab==='cal')?refreshDots():render();
+  }catch(e){
+    subStatus='error';
+    subMsg=/Failed to fetch|NetworkError|CORS/i.test(e.message)
+      ? 'Blocked by the browser (CORS). Add a proxy URL below — see setup notes.'
+      : e.message;
+    render();
+  }
+}
+function subConnect(){
+  const u=document.getElementById('subUrl'), p=document.getElementById('subProxy'), m=document.getElementById('subMin');
+  if(u) SUB_URL=u.value.trim();
+  if(p) SUB_PROXY=p.value.trim();
+  if(m) SUB_MINUTES=parseInt(m.value)||15;
+  subFetch(false);
+}
+function subDisconnect(){
+  SUB_URL=''; subEvents=[]; subStatus='idle'; subMsg=''; subLast=null;
+  if(subTimer){ clearInterval(subTimer); subTimer=null; }
+  render();
+}
+
+let IMPORTED=[];           // {id,title,start:Date,dur,allDay,rrule,src:'ics'|'manual'}
+let importInfo='';
+/* ---------- LOCAL PERSISTENCE ----------
+   Saves to this device's browser storage. Sandboxed previews block it,
+   so every call degrades quietly to in-memory instead of throwing. */
+const DB_KEY='zeus.protocol.v1';
+let canPersist=true, lastSaveOk=null;
+
+function saveAll(){
+  if(!canPersist) return;
+  try{
+    localStorage.setItem(DB_KEY, JSON.stringify({
+      v:1, ROUTINES, SUPP_BLOCKS, state, suppState, optOn, PANELS,
+      IMPORTED: IMPORTED.map(e=>({...e,start:e.start.toISOString()})),
+      SUB_URL, SUB_PROXY, SUB_MINUTES
+    }));
+    lastSaveOk=true;
+  }catch(e){ canPersist=false; lastSaveOk=false; }
+}
+function loadAll(){
+  try{
+    const raw=localStorage.getItem(DB_KEY);
+    if(!raw){ lastSaveOk=true; return; }
+    const d=JSON.parse(raw);
+    if(Array.isArray(d.ROUTINES)&&d.ROUTINES.length) ROUTINES=d.ROUTINES;
+    if(Array.isArray(d.SUPP_BLOCKS)&&d.SUPP_BLOCKS.length) SUPP_BLOCKS=d.SUPP_BLOCKS;
+    state=d.state||{}; suppState=d.suppState||{}; optOn=d.optOn||{};
+    IMPORTED=(d.IMPORTED||[]).map(e=>({...e,start:new Date(e.start)}));
+    PANELS=d.PANELS||[];
+    SUB_URL=d.SUB_URL||''; SUB_PROXY=d.SUB_PROXY||''; SUB_MINUTES=d.SUB_MINUTES||15;
+    lastSaveOk=true;
+  }catch(e){ canPersist=false; lastSaveOk=false; }
+}
+function wipeAll(){
+  if(!confirm('Erase all saved routines, supplements and history on this device?')) return;
+  try{ localStorage.removeItem(DB_KEY); }catch(e){}
+  location.reload();
+}
+
+/* ======================================================================
+   BIO ANALYSIS  (beta)
+   Blood panels are parsed from PDF text with pdf.js, then compared
+   against the previously uploaded panel.
+   ====================================================================== */
+let PANELS=[];          // {id,date,name,values:{key:{v,unit}},found}
+let bioNote='', bioBusy=false, bioMsg='';
+
+// German + English labels, since Austrian labs report in German.
+const MARKERS=[
+ {k:'hb',    n:'Hemoglobin',      u:'g/dL',  lo:13.5, hi:17.5, re:/h(?:ä|ae|æ)moglobin|hemoglobin|\bHGB\b|\bHb\b/i},
+ {k:'hkt',   n:'Hematocrit',      u:'%',     lo:40,   hi:52,   re:/h(?:ä|ae)matokrit|hematocrit|\bHKT\b|\bHCT\b/i},
+ {k:'ery',   n:'Erythrocytes',    u:'T/L',   lo:4.3,  hi:5.9,  re:/erythrozyten|erythrocytes|\bRBC\b/i},
+ {k:'leu',   n:'Leukocytes',      u:'G/L',   lo:4.0,  hi:10.0, re:/leukozyten|leukocytes|\bWBC\b/i},
+ {k:'ferr',  n:'Ferritin',        u:'ng/mL', lo:30,   hi:400,  re:/ferritin/i},
+ {k:'iron',  n:'Iron',            u:'µg/dL', lo:65,   hi:175,  re:/\beisen\b|\bserum iron\b/i},
+ {k:'b12',   n:'Vitamin B12',     u:'pg/mL', lo:200,  hi:900,  re:/vitamin\s*b\s*-?12|cobalamin|holo-?tc/i},
+ {k:'vitd',  n:'Vitamin D (25-OH)',u:'ng/mL',lo:30,   hi:70,   re:/25-?\s*oh|vitamin\s*d/i},
+ {k:'folat', n:'Folate',          u:'ng/mL', lo:3,    hi:20,   re:/fols(?:ä|ae)ure|folate|folat\b/i},
+ {k:'glu',   n:'Glucose (fasting)',u:'mg/dL',lo:70,   hi:99,   re:/n(?:ü|ue)chternglukose|glukose|glucose|blutzucker/i},
+ {k:'hba1c', n:'HbA1c',           u:'%',     lo:4.0,  hi:5.6,  re:/hba1c|h(?:ä|ae)moglobin\s*a1c/i},
+ {k:'insul', n:'Insulin',         u:'µU/mL', lo:2,    hi:20,   re:/insulin/i},
+ {k:'chol',  n:'Total cholesterol',u:'mg/dL',lo:0,    hi:200,  re:/gesamtcholesterin|gesamt-?cholesterin|total cholesterol|cholesterin\s*ges/i},
+ {k:'hdl',   n:'HDL',             u:'mg/dL', lo:40,   hi:999,  re:/\bhdl\b/i},
+ {k:'ldl',   n:'LDL',             u:'mg/dL', lo:0,    hi:130,  re:/\bldl\b/i},
+ {k:'trig',  n:'Triglycerides',   u:'mg/dL', lo:0,    hi:150,  re:/triglyzeride|triglyceride|triglycerides/i},
+ {k:'crp',   n:'CRP',             u:'mg/L',  lo:0,    hi:5,    re:/\bcrp\b|c-?reaktives/i},
+ {k:'tsh',   n:'TSH',             u:'mIU/L', lo:0.4,  hi:4.0,  re:/\btsh\b|thyreotropin/i},
+ {k:'ft3',   n:'fT3',             u:'pg/mL', lo:2.3,  hi:4.2,  re:/\bf\s*-?t3\b|freies?\s*t3/i},
+ {k:'ft4',   n:'fT4',             u:'ng/dL', lo:0.8,  hi:1.8,  re:/\bf\s*-?t4\b|freies?\s*t4/i},
+ {k:'test',  n:'Testosterone',    u:'ng/dL', lo:300,  hi:1000, re:/testosteron/i},
+ {k:'alt',   n:'ALT (GPT)',       u:'U/L',   lo:0,    hi:50,   re:/\balt\b|\bgpt\b|alat/i},
+ {k:'ast',   n:'AST (GOT)',       u:'U/L',   lo:0,    hi:50,   re:/\bast\b|\bgot\b|asat/i},
+ {k:'ggt',   n:'GGT',             u:'U/L',   lo:0,    hi:60,   re:/gamma-?\s*gt|\bggt\b|\bg-?gt\b/i},
+ {k:'krea',  n:'Creatinine',      u:'mg/dL', lo:0.7,  hi:1.3,  re:/kreatinin|creatinine/i},
+ {k:'hs',    n:'Uric acid',       u:'mg/dL', lo:3.5,  hi:7.2,  re:/harns(?:ä|ae)ure|uric acid/i},
+ {k:'mg',    n:'Magnesium',       u:'mmol/L',lo:0.75, hi:1.05, re:/magnesium/i},
+ {k:'zn',    n:'Zinc',            u:'µg/dL', lo:70,   hi:120,  re:/\bzink\b|\bzinc\b/i},
+];
+
+function injectScript(src){
+  return new Promise((res,rej)=>{
+    const el=document.createElement('script');
+    el.src=src; el.onload=()=>res(); el.onerror=()=>rej(new Error('Could not load the PDF reader. Check your connection.'));
+    document.head.appendChild(el);
+  });
+}
+async function ensurePdfJs(){
+  if(window.pdfjsLib) return;
+  const base='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  await injectScript(base+'pdf.min.js');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc=base+'pdf.worker.min.js';
+}
+
+// Rebuild visual lines from pdf.js text items using their y position.
+async function pdfToLines(file){
+  await ensurePdfJs();
+  const buf=await file.arrayBuffer();
+  const pdf=await window.pdfjsLib.getDocument({data:buf}).promise;
+  const lines=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const tc=await page.getTextContent();
+    const rows={};
+    tc.items.forEach(it=>{
+      const y=Math.round(it.transform[5]);
+      (rows[y]=rows[y]||[]).push({x:it.transform[4],s:it.str});
+    });
+    Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
+      const line=rows[y].sort((a,b)=>a.x-b.x).map(o=>o.s).join(' ').replace(/\s+/g,' ').trim();
+      if(line) lines.push(line);
+    });
+  }
+  return lines;
+}
+
+const numAt=str=>{
+  const m=str.match(/(-?\d{1,4}(?:[.,]\d{1,3})?)/);
+  return m?parseFloat(m[1].replace(',','.')):null;
+};
+
+function parsePanel(lines){
+  const values={};
+  lines.forEach(line=>{
+    MARKERS.forEach(mk=>{
+      if(values[mk.k]) return;
+      const m=mk.re.exec(line);
+      if(!m) return;
+      const after=line.slice(m.index+m[0].length);
+      const v=numAt(after);
+      if(v===null||!isFinite(v)) return;
+      // Longest units first, and the match must start on a non-letter so
+      // "ng/dl" is never truncated to "g/dl".
+      const um=after.match(/(?:^|[^A-Za-zµ])(µg\/dl|ug\/dl|ng\/dl|ng\/ml|pg\/ml|mg\/dl|mg\/l|g\/dl|mmol\/l|µmol\/l|umol\/l|µU\/ml|uU\/ml|mIU\/l|IU\/l|U\/l|G\/l|T\/l|%)/i);
+      values[mk.k]={v,unit:um?um[1]:mk.u};
+    });
+  });
+  let date=null;
+  for(const l of lines){
+    const d=l.match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);
+    if(d){ date=`${d[3]}-${pad(+d[2])}-${pad(+d[1])}`; break; }
+    const iso=l.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if(iso){ date=iso[0]; break; }
+  }
+  return {values,date};
+}
+
+async function handlePdf(file){
+  bioBusy=true; bioMsg='Reading '+file.name+' …'; render();
+  try{
+    const lines=await pdfToLines(file);
+    const {values,date}=parsePanel(lines);
+    const found=Object.keys(values).length;
+    if(!found){ bioBusy=false; bioMsg='No known biomarkers found in that PDF. It may be a scan without a text layer.'; return render(); }
+    PANELS.push({id:'p'+Date.now(), date:date||key(new Date()), name:file.name, values, found});
+    PANELS.sort((a,b)=>a.date.localeCompare(b.date));
+    bioBusy=false; bioMsg='Added '+found+' markers from '+file.name+'.';
+  }catch(e){ bioBusy=false; bioMsg=e.message||'Could not read that PDF.'; }
+  render();
+}
+
+let activeTab='agenda', activeFilter='all', editing=null, mode='repeat', selDows=[0,1,2,3,4,5,6];
+let viewDate=new Date(); viewDate.setHours(0,0,0,0);
+let state={}, suppState={}, optOn={};   // optOn[dateKey][routineId] = active for that day
+
+const pad=n=>String(n).padStart(2,'0');
+const key=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const dk=()=>key(viewDate);
+function marks(store){ const k=dk(); if(!store[k]) store[k]={}; return store[k]; }
+function optMarks(d){ const k=key(d||viewDate); if(!optOn[k]) optOn[k]={}; return optOn[k]; }
+const isOptActive=(r,d)=>!r.optional || !!optMarks(d)[r.id];
+const activeRoutinesOn=d=>routinesOn(d).filter(r=>isOptActive(r,d));
+function toggleOpt(id){ const m=optMarks(); m[id]=!m[id]; if(!m[id]) delete marks(state)[id]; render(); }
+const hhmm=d=>pad(d.getHours())+':'+pad(d.getMinutes());
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+function routinesOn(d){
+  const dow=d.getDay(), k=key(d);
+  return ROUTINES.filter(r=>r.date?r.date===k:(!r.days||r.days.includes(dow)))
+                 .sort((a,b)=>a.time.localeCompare(b.time));
+}
+const visibleRoutines=()=>routinesOn(viewDate);
+const allSupps=()=>SUPP_BLOCKS.flatMap(b=>b.items);
+
+/* ---------- ICS PARSING ---------- */
+function unescapeICS(s){ return s.replace(/\\n/gi,' ').replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\\\/g,'\\'); }
+function parseICSDate(v){
+  const m=String(v).match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/);
+  if(!m) return null;
+  const [,y,mo,d,h,mi,s,z]=m;
+  if(h===undefined) return {date:new Date(+y,+mo-1,+d),allDay:true};
+  if(z) return {date:new Date(Date.UTC(+y,+mo-1,+d,+h,+mi,+s)),allDay:false};
+  return {date:new Date(+y,+mo-1,+d,+h,+mi,+s),allDay:false};
+}
+function parseICS(text){
+  const lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\n[ \t]/g,'').split('\n');
+  const out=[]; let cur=null;
+  for(const raw of lines){
+    const line=raw.trim(); if(!line) continue;
+    if(line==='BEGIN:VEVENT'){ cur={}; continue; }
+    if(line==='END:VEVENT'){
+      if(cur&&cur.start){
+        const dur=cur.end?Math.max(1,Math.round((cur.end-cur.start)/60000)):(cur.allDay?1440:60);
+        out.push({id:'i'+out.length+'-'+Date.now(),title:cur.title||'(no title)',
+          start:cur.start,dur,allDay:!!cur.allDay,rrule:cur.rrule||null,src:'ics'});
+      }
+      cur=null; continue;
+    }
+    if(!cur) continue;
+    const ci=line.indexOf(':'); if(ci<0) continue;
+    const left=line.slice(0,ci), val=line.slice(ci+1);
+    const name=left.split(';')[0].toUpperCase();
+    if(name==='SUMMARY') cur.title=unescapeICS(val);
+    else if(name==='DTSTART'){ const p=parseICSDate(val); if(p){ cur.start=p.date; cur.allDay=p.allDay; } }
+    else if(name==='DTEND'){ const p=parseICSDate(val); if(p) cur.end=p.date; }
+    else if(name==='RRULE'){
+      const r={}; val.split(';').forEach(kv=>{ const [k,v2]=kv.split('='); if(k) r[k.toUpperCase()]=v2; });
+      cur.rrule=r;
+    }
+  }
+  return out;
+}
+const dayStart=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate());
+const daysBetween=(a,b)=>Math.round((dayStart(b)-dayStart(a))/86400000);
+const sameDay=(a,b)=>dayStart(a).getTime()===dayStart(b).getTime();
+function occursOn(ev,day){
+  const diff=daysBetween(ev.start,day);
+  if(diff<0) return false;
+  const r=ev.rrule;
+  if(!r) return diff===0;
+  if(r.UNTIL){ const u=parseICSDate(r.UNTIL.replace(/Z$/,'Z')); if(u&&dayStart(day)>dayStart(u.date)) return false; }
+  const iv=parseInt(r.INTERVAL||'1')||1;
+  switch(r.FREQ){
+    case 'DAILY': return diff%iv===0;
+    case 'WEEKLY': {
+      const wkStart=d=>{ const x=dayStart(d); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; };
+      const w=Math.round((wkStart(day)-wkStart(ev.start))/(7*86400000));
+      if(w%iv!==0) return false;
+      if(r.BYDAY){
+        const map={SU:0,MO:1,TU:2,WE:3,TH:4,FR:5,SA:6};
+        return r.BYDAY.split(',').map(x=>map[x.slice(-2).toUpperCase()]).includes(day.getDay());
+      }
+      return day.getDay()===ev.start.getDay();
+    }
+    case 'MONTHLY': {
+      const md=r.BYMONTHDAY?parseInt(r.BYMONTHDAY):ev.start.getDate();
+      if(day.getDate()!==md) return false;
+      const mo=(day.getFullYear()-ev.start.getFullYear())*12+(day.getMonth()-ev.start.getMonth());
+      return mo>=0&&mo%iv===0;
+    }
+    case 'YEARLY':
+      return day.getMonth()===ev.start.getMonth()&&day.getDate()===ev.start.getDate()
+        &&(day.getFullYear()-ev.start.getFullYear())%iv===0;
+    default: return diff===0;
+  }
+}
+const allEventSources=()=>IMPORTED.concat(subEvents);
+const eventsOn=d=>allEventSources().filter(e=>occursOn(e,d))
+  .sort((a,b)=>(a.allDay?-1:0)-(b.allDay?-1:0)||hhmm(a.start).localeCompare(hhmm(b.start)));
+const eventsOnDay=()=>eventsOn(viewDate);
+
+/* merged agenda for a given day */
+function agendaOn(d){
+  const out=[];
+  routinesOn(d).forEach(r=>out.push({t:r.time,kind:'routine',ref:r}));
+  SUPP_BLOCKS.filter(b=>b.items.length).forEach(b=>out.push({t:b.time,kind:'supp',ref:b}));
+  eventsOn(d).forEach(e=>out.push({t:e.allDay?'00:00':hhmm(e.start),kind:'event',ref:e,allDay:e.allDay}));
+  return out.sort((a,b)=>a.t.localeCompare(b.t));
+}
+
+document.getElementById('pdfInput').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  handlePdf(f); e.target.value='';
+});
+
+document.getElementById('fileInput').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const ev=parseICS(rd.result);
+      if(!ev.length){ importInfo='No events found in that file.'; }
+      else { IMPORTED=IMPORTED.concat(ev); importInfo='Imported '+ev.length+' event'+(ev.length>1?'s':'')+' from '+f.name; }
+    }catch(err){ importInfo='Could not read that file. Make sure it is a .ics export.'; }
+    e.target.value=''; render();
+  };
+  rd.readAsText(f);
+});
+
+/* ---------- RENDER ---------- */
+function renderDate(){
+  const t=new Date(); t.setHours(0,0,0,0);
+  const d=Math.round((viewDate-t)/86400000);
+  const lbl=d===0?'Today':d===1?'Tomorrow':d===-1?'Yesterday':'';
+  document.getElementById('date').textContent=(lbl?lbl+' · ':'')+
+    viewDate.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+}
+function shiftDay(n){ viewDate.setDate(viewDate.getDate()+n); render(); }
+function goToday(){ viewDate=new Date(); viewDate.setHours(0,0,0,0); render(); }
+
+function setTab(t){
+  activeTab=t; activeFilter='all';
+  ['agenda','routine','supps','cal','bio'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===t));
+  document.getElementById('pageTitle').textContent =
+    t==='agenda'?'Agenda':t==='routine'?'Daily Routine':t==='supps'?'Supplements':t==='cal'?'Calendar':'Bio Analysis';
+  document.getElementById('progWrap').style.display = (t==='cal'||t==='bio')?'none':'block';
+  document.querySelector('.daynav').style.display = (t==='cal'||t==='bio')?'none':'flex';
+  window.scrollTo(0,0);
+  render();
+}
+
+function renderFilters(){
+  const box=document.getElementById('filters'); box.innerHTML='';
+  if(activeTab!=='routine'){ box.style.display='none'; return; }
+  box.style.display='flex';
+  Object.entries(CATS).forEach(([k,v])=>{
+    const b=document.createElement('button');
+    b.className='chip'+(activeFilter===k?' active':''); b.textContent=v;
+    b.onclick=()=>{ activeFilter=k; render(); }; box.appendChild(b);
+  });
+}
+
+function render(){
+  renderDate(); renderFilters();
+  const c=document.getElementById('content'); c.innerHTML='';
+  if(activeTab==='agenda') renderAgenda(c);
+  else if(activeTab==='routine') renderRoutine(c);
+  else if(activeTab==='supps') renderSupps(c);
+  else if(activeTab==='cal') renderCalendar(c);
+  else renderBio(c);
+  renderProgress(); renderFooter(); saveAll();
+}
+
+function renderRoutine(c){
+  let items=visibleRoutines();
+  if(activeFilter!=='all') items=items.filter(r=>r.cat===activeFilter);
+  if(!items.length){ c.innerHTML='<div class="empty">Nothing scheduled here.<br>Tap + to add something.</div>'; return; }
+  const m=marks(state);
+  items.forEach(r=>{
+    const active=isOptActive(r,viewDate), done=active&&!!m[r.id];
+    const row=document.createElement('div');
+    row.className='row'+(done?' done':'')+(active?'':' opt-off');
+    const pill=r.optional
+      ? `<button class="opt-pill ${active?'':'off'}" data-opt="${r.id}">${active?'Optional · on':'Optional · off'}</button>`
+      : '';
+    row.innerHTML=`
+      <div class="check ${done?'on':''}${active?'':' plus'}" data-${active?'id':'opt'}="${r.id}"></div>
+      <div class="rbody">
+        <div class="rtitle">${esc(r.title)}</div>
+        <div class="rmeta"><span class="tag ${r.cat}">${CATS[r.cat]}</span>
+          <span>${r.time} · ${r.dur} min</span>${r.date?'<span class="tag once">Single</span>':''}${pill}</div>
+      </div>
+      <div class="acts">
+        <button class="ico edit" data-edit="${r.id}" aria-label="Edit">✎</button>
+        <button class="ico del" data-del="${r.id}" aria-label="Delete">✕</button>
+      </div>`;
+    c.appendChild(row);
+  });
+  c.querySelectorAll('[data-opt]').forEach(x=>x.onclick=e=>{ e.stopPropagation(); toggleOpt(x.dataset.opt); });
+  c.querySelectorAll('.check').forEach(x=>x.onclick=()=>{ const m=marks(state); m[x.dataset.id]=!m[x.dataset.id]; render(); });
+  c.querySelectorAll('[data-edit]').forEach(x=>x.onclick=()=>openSheet('edit',x.dataset.edit));
+  c.querySelectorAll('[data-del]').forEach(x=>x.onclick=()=>{
+    const r=ROUTINES.find(y=>y.id===x.dataset.del);
+    if(confirm('Delete "'+r.title+'"?')){ ROUTINES.splice(ROUTINES.indexOf(r),1); render(); }
+  });
+}
+
+function renderSupps(c){
+  const m=marks(suppState);
+  SUPP_BLOCKS.forEach(block=>{
+    const wrap=document.createElement('div'); wrap.className='block';
+    wrap.innerHTML=`<div class="block-head"><span class="block-title">${esc(block.title)}</span>
+      <button class="block-time" data-btime="${block.id}">${block.time} ✎</button></div>`;
+    block.items.forEach(it=>{
+      const done=!!m[it.id];
+      const row=document.createElement('div'); row.className='row'+(done?' done':'');
+      row.innerHTML=`
+        <div class="check ${done?'on':''}" data-sid="${it.id}"></div>
+        <div class="rbody"><div class="rtitle">${esc(it.name)}</div><div class="rmeta">${esc(it.sub)}</div></div>
+        <span class="dose">${esc(it.dose)}</span>
+        <div class="acts">
+          <button class="ico edit" data-sedit="${block.id}:${it.id}" aria-label="Edit">✎</button>
+          <button class="ico del" data-sdel="${block.id}:${it.id}" aria-label="Delete">✕</button>
+        </div>`;
+      wrap.appendChild(row);
+    });
+    if(block.wait){ const w=document.createElement('div'); w.className='wait-note'; w.textContent='⏱ '+block.wait; wrap.appendChild(w); }
+    c.appendChild(wrap);
+  });
+  c.querySelectorAll('.check').forEach(x=>x.onclick=()=>{ const m=marks(suppState); m[x.dataset.sid]=!m[x.dataset.sid]; render(); });
+  c.querySelectorAll('[data-sedit]').forEach(x=>x.onclick=()=>openSheet('edit',x.dataset.sedit));
+  c.querySelectorAll('[data-sdel]').forEach(x=>x.onclick=()=>{
+    const [bid,iid]=x.dataset.sdel.split(':');
+    const b=SUPP_BLOCKS.find(y=>y.id===bid); const it=b.items.find(y=>y.id===iid);
+    if(confirm('Delete "'+it.name+'"?')){ b.items.splice(b.items.indexOf(it),1); render(); }
+  });
+  c.querySelectorAll('[data-btime]').forEach(b=>b.onclick=()=>{
+    const bl=SUPP_BLOCKS.find(x=>x.id===b.dataset.btime);
+    const v=prompt('Time for "'+bl.title+'" (HH:MM)',bl.time);
+    if(v&&/^\d{1,2}:\d{2}$/.test(v)){ bl.time=v.length===4?'0'+v:v; render(); }
+  });
+}
+
+function renderAgenda(c){
+  const items=agendaOn(viewDate);
+  if(!items.length){ c.innerHTML='<div class="empty">Nothing on this day.<br>Tap + to add something.</div>'; return; }
+  const mr=marks(state), ms=marks(suppState);
+  const isToday=sameDay(viewDate,new Date());
+  const nowT=isToday?hhmm(new Date()):null;
+  let nowPlaced=false;
+
+  items.forEach(a=>{
+    if(nowT && !nowPlaced && a.t>nowT){
+      const n=document.createElement('div'); n.className='now-line';
+      n.innerHTML='<span class="lbl">NOW '+nowT+'</span><span class="ln"></span>';
+      c.appendChild(n); nowPlaced=true;
+    }
+    const row=document.createElement('div');
+    if(a.kind==='routine'){
+      const r=a.ref, active=isOptActive(r,viewDate), done=active&&!!mr[r.id];
+      row.className='row'+(done?' done':'')+(active?'':' opt-off');
+      const pill=r.optional
+        ? `<button class="opt-pill ${active?'':'off'}" data-opt="${r.id}">${active?'Optional · on':'Optional · off'}</button>`
+        : '';
+      row.innerHTML=`<span class="ag-time">${r.time}<small>${r.dur} min</small></span>
+        <div class="check ${done?'on':''}${active?'':' plus'}" data-${active?'id':'opt'}="${r.id}"></div>
+        <div class="rbody"><div class="rtitle">${esc(r.title)}</div>
+          <div class="rmeta"><span class="tag ${r.cat}">${CATS[r.cat]}</span>${pill}</div></div>
+        <div class="acts"><button class="ico edit" data-edit="${r.id}">✎</button></div>`;
+    } else if(a.kind==='supp'){
+      const b=a.ref, tot=b.items.length, dn=b.items.filter(i=>ms[i.id]).length, all=dn===tot;
+      row.className='row'+(all?' done':'');
+      row.innerHTML=`<span class="ag-time">${b.time}<small>${dn}/${tot}</small></span>
+        <div class="check ${all?'on':''}" data-blk="${b.id}"></div>
+        <div class="rbody"><div class="rtitle">Supplements · ${esc(b.title)}</div>
+          <div class="ag-sub">${esc(b.items.map(i=>i.name).join(', '))}</div></div>
+        <div class="acts"><button class="ico edit" data-goblk="1">✎</button></div>`;
+    } else {
+      const e=a.ref;
+      row.className='row';
+      row.innerHTML=`<span class="ag-time">${a.allDay?'all<small>day</small>':a.t+'<small>'+e.dur+' min</small>'}</span>
+        <div class="rbody"><div class="rtitle">${esc(e.title)}</div>
+          <div class="rmeta"><span class="tag ${e.src==='sub'?'google':'imported'}">${e.src==='sub'?'Calendar':'Imported'}</span></div></div>
+        ${e.src==='sub'?'':`<div class="acts"><button class="ico del" data-edel="${e.id}">✕</button></div>`}`;
+    }
+    c.appendChild(row);
+  });
+  if(nowT && !nowPlaced){
+    const n=document.createElement('div'); n.className='now-line';
+    n.innerHTML='<span class="lbl">NOW '+nowT+'</span><span class="ln"></span>';
+    c.appendChild(n);
+  }
+  if(!IMPORTED.length) c.insertAdjacentHTML('beforeend',
+    '<div class="note">Your Apple Calendar events will appear here once imported. Open the <strong>Calendar</strong> tab to import an .ics file.</div>');
+
+  c.querySelectorAll('[data-id]').forEach(x=>x.onclick=()=>{ const m=marks(state); m[x.dataset.id]=!m[x.dataset.id]; render(); });
+  c.querySelectorAll('[data-opt]').forEach(x=>x.onclick=e=>{ e.stopPropagation(); toggleOpt(x.dataset.opt); });
+  c.querySelectorAll('[data-blk]').forEach(x=>x.onclick=()=>{
+    const b=SUPP_BLOCKS.find(y=>y.id===x.dataset.blk), m=marks(suppState);
+    const all=b.items.every(i=>m[i.id]); b.items.forEach(i=>m[i.id]=!all); render();
+  });
+  c.querySelectorAll('[data-edit]').forEach(x=>x.onclick=()=>{ activeTab='routine'; openSheet('edit',x.dataset.edit); activeTab='agenda'; });
+  c.querySelectorAll('[data-goblk]').forEach(x=>x.onclick=()=>setTab('supps'));
+  c.querySelectorAll('[data-edel]').forEach(b=>b.onclick=()=>deleteEventById(b.dataset.edel));
+}
+
+function deleteEventById(id){
+  const i=IMPORTED.findIndex(e=>e.id===id);
+  if(i>-1&&confirm('Remove "'+IMPORTED[i].title+'" from this app?')){ IMPORTED.splice(i,1); render(); }
+}
+
+/* ---------- MONTH VIEW ---------- */
+let monthsBack=6, monthsFwd=12, monthScrollHooked=false;
+const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function dayFlags(d){
+  const k=key(d);
+  const cal=eventsOn(d).length;
+  const once=ROUTINES.filter(r=>r.date===k).length;
+  const sport=activeRoutinesOn(d).filter(r=>r.cat==='sport').length;
+  return {cal,once,sport};
+}
+
+function monthBlock(offset){
+  const base=new Date(); base.setHours(0,0,0,0); base.setDate(1);
+  base.setMonth(base.getMonth()+offset);
+  const y=base.getFullYear(), mo=base.getMonth();
+  const first=new Date(y,mo,1), lead=(first.getDay()+6)%7;
+  const dim=new Date(y,mo+1,0).getDate();
+  const today=new Date(); today.setHours(0,0,0,0);
+
+  let cells='';
+  for(let i=0;i<lead;i++) cells+='<button class="cell pad"><span class="num"></span></button>';
+  for(let d=1;d<=dim;d++){
+    const dt=new Date(y,mo,d);
+    const f=dayFlags(dt);
+    const cls=['cell'];
+    if(sameDay(dt,today)) cls.push('today');
+    if(sameDay(dt,viewDate)) cls.push('sel');
+    if(dt.getDay()===0||dt.getDay()===6) cls.push('wknd');
+    let dots='';
+    if(f.cal) dots+='<span class="dot cal"></span>';
+    if(f.once) dots+='<span class="dot once"></span>';
+    if(f.sport) dots+='<span class="dot sport"></span>';
+    cells+=`<button class="${cls.join(' ')}" data-day="${key(dt)}">
+      <span class="num">${d}</span><span class="dots">${dots}</span></button>`;
+  }
+  return `<div class="month" id="m${offset}">
+      <div class="mhead">${MONTH_NAMES[mo]} <span>${y}</span></div>
+      <div class="wdays"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div>
+      <div class="mgrid">${cells}</div>
+    </div>`;
+}
+
+function subCardHTML(){
+  const live=subStatus==='live';
+  const when=subLast?subLast.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';
+  if(live) return `<div class="gcard on">
+    <div class="gtop"><span class="gdot live"></span><span class="gtitle">Calendar subscription</span></div>
+    <div class="gsub">Live · <b>${subEvents.length}</b> events · updated ${when}<br>
+      Re-checks every ${SUB_MINUTES} min. Read-only — your routines stay in this app.</div>
+    <div class="grow">
+      <button class="gbtn sec" onclick="subDisconnect()">Disconnect</button>
+      <button class="gbtn pri" onclick="subFetch(false)">Refresh now</button>
+    </div></div>`;
+  const dot=subStatus==='error'?'err':'';
+  return `<div class="gcard">
+    <div class="gtop"><span class="gdot ${dot}"></span><span class="gtitle">Calendar subscription</span></div>
+    <div class="gsub">${subStatus==='loading'?'Fetching…':subMsg?esc(subMsg):
+      'Paste the secret iCal address of your Google or iCloud calendar. Read-only, refreshes on its own.'}</div>
+    <input class="gid-input" id="subUrl" value="${esc(SUB_URL)}" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
+    <input class="gid-input" id="subProxy" value="${esc(SUB_PROXY)}" placeholder="Proxy prefix (required) — e.g. https://you.workers.dev/?url={url}">
+    <input class="gid-input" id="subMin" type="number" min="5" value="${SUB_MINUTES}" placeholder="Refresh minutes">
+    <div class="grow"><button class="gbtn pri" onclick="subConnect()">Subscribe</button></div>
+    <details class="help"><summary>Why a proxy, and how to set one up</summary><ol>
+      <li>Google and iCloud send no <code>CORS</code> header, so the browser blocks a direct fetch. A proxy adds it.</li>
+      <li>Cloudflare Workers is free: dash.cloudflare.com → Workers → Create.</li>
+      <li>Paste the 6-line worker script I gave you, then Deploy.</li>
+      <li>Use <code>https://NAME.workers.dev/?url={url}</code> as the proxy prefix above.</li>
+      <li>Google feed: Calendar settings → your calendar → Integrate calendar → <b>Secret address in iCal format</b>.</li>
+      <li>iCloud feed: Calendar → share a calendar → Public Calendar → copy the <code>webcal://</code> link.</li>
+    </ol></details></div>`;
+}
+
+function refreshDots(){
+  document.querySelectorAll('[data-day]').forEach(b=>{
+    const [y,m,d]=b.dataset.day.split('-').map(Number);
+    const f=dayFlags(new Date(y,m-1,d));
+    let dots='';
+    if(f.cal) dots+='<span class="dot cal"></span>';
+    if(f.once) dots+='<span class="dot once"></span>';
+    if(f.sport) dots+='<span class="dot sport"></span>';
+    const el=b.querySelector('.dots'); if(el) el.innerHTML=dots;
+  });
+}
+
+function renderCalendar(c){
+  c.insertAdjacentHTML('beforeend', subCardHTML());
+  c.insertAdjacentHTML('beforeend',
+    `<div class="note${canPersist?'':' warn'}" style="margin:0 6px 4px">
+      ${canPersist
+        ? '<strong>Saved on this device.</strong> Your routines, supplements and daily ticks survive a reload.'
+        : '<strong>Not being saved.</strong> This preview blocks browser storage — download the file and open it locally to keep changes.'}
+      ${canPersist?'<br><button class="opt-pill off" style="margin-top:8px" onclick="wipeAll()">Erase all saved data</button>':''}
+    </div>`);
+  c.insertAdjacentHTML('beforeend',
+    `<div class="compact-import">
+      <div class="ci-txt">Or import a one-off <strong>.ics</strong> export${importInfo?'<br>'+esc(importInfo):''}</div>
+      <button onclick="document.getElementById('fileInput').click()">Import</button>
+    </div>`);
+  const wrap=document.createElement('div'); wrap.id='monthWrap';
+  let html='';
+  for(let i=-monthsBack;i<=monthsFwd;i++) html+=monthBlock(i);
+  wrap.innerHTML=html;
+  c.appendChild(wrap);
+  c.insertAdjacentHTML('beforeend','<div class="month-hint">Keep scrolling for more months</div>');
+
+  wrap.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>{
+    const [y,m,d]=b.dataset.day.split('-').map(Number);
+    viewDate=new Date(y,m-1,d); viewDate.setHours(0,0,0,0);
+    setTab('agenda');
+  });
+
+  setTimeout(()=>{
+    const el=document.getElementById('m0');
+    if(el){ const hh=document.querySelector('header').offsetHeight;
+      window.scrollTo({top:el.offsetTop-hh-6,behavior:'instant'}); }
+  },0);
+
+  if(!monthScrollHooked){
+    monthScrollHooked=true;
+    window.addEventListener('scroll',()=>{
+      if(activeTab!=='cal') return;
+      if(window.innerHeight+window.scrollY > document.body.offsetHeight-600){
+        const w=document.getElementById('monthWrap'); if(!w) return;
+        if(w.dataset.busy) return; w.dataset.busy='1';
+        let add=''; for(let i=monthsFwd+1;i<=monthsFwd+6;i++) add+=monthBlock(i);
+        monthsFwd+=6; w.insertAdjacentHTML('beforeend',add);
+        w.querySelectorAll('[data-day]:not([data-bound])').forEach(b=>{
+          b.dataset.bound='1';
+          b.onclick=()=>{ const [y,m,d]=b.dataset.day.split('-').map(Number);
+            viewDate=new Date(y,m-1,d); viewDate.setHours(0,0,0,0); setTab('agenda'); };
+        });
+        delete w.dataset.busy;
+      }
+    },{passive:true});
+  }
+}
+
+function brandCard(id,cls,label,status,detail){
+  return `<div class="biocard">
+    <div class="biotop">
+      <span class="brandname ${cls}">${label}</span>
+      <button class="connect-btn" data-bio="${id}">Connect</button>
+    </div>
+    <div class="biostatus">${status}${bioNote===id?'<br><br>'+detail:''}</div>
+  </div>`;
+}
+
+function renderBio(c){
+  c.insertAdjacentHTML('beforeend',
+    `<div class="note warn" style="margin:6px 6px 14px"><span class="beta-pill">Beta</span>
+      &nbsp;Device connections are scaffolded, not live yet. Biomarker upload works now.</div>`);
+
+  c.insertAdjacentHTML('beforeend', brandCard('whoop','brand-whoop','WHOOP',
+    'Recovery, strain, HRV and sleep. <b>Not connected.</b>',
+    'WHOOP has a real public API, but its OAuth flow needs a client secret, which cannot live in a web page. This needs a small backend — the same Cloudflare Worker you use for the calendar could do it.'));
+
+  c.insertAdjacentHTML('beforeend', brandCard('health','brand-health','Apple Health',
+    'Steps, workouts, heart rate, sleep. <b>Not connected.</b>',
+    'Apple gives web pages no access to HealthKit at all — it is native-only, with no exception. The realistic route is an Apple Shortcut that exports the metrics you want and hands them to this app.'));
+
+  c.insertAdjacentHTML('beforeend', brandCard('eight','brand-eight','EIGHT SLEEP',
+    'Sleep stages, bed temperature, HRV. <b>Not connected.</b>',
+    'Eight Sleep publishes no official API. Only unofficial endpoints exist, which need your account password and can break without warning. I would rather wire this up properly than build on that.'));
+
+  c.insertAdjacentHTML('beforeend',
+    `<div class="upload-zone">
+      <h3>Upload biomarkers</h3>
+      <p>Pick a blood test <strong>PDF</strong>. Values are read out and compared with your previous panel.</p>
+      <button class="import-btn" ${bioBusy?'disabled':''} onclick="document.getElementById('pdfInput').click()">
+        ${bioBusy?'Reading…':'Choose PDF'}</button>
+      ${bioMsg?`<div class="import-status">${esc(bioMsg)}</div>`:''}
+    </div>`);
+
+  if(!PANELS.length){
+    c.insertAdjacentHTML('beforeend','<div class="empty">No blood panels yet.<br>Upload one to start tracking.</div>');
+    c.querySelectorAll('[data-bio]').forEach(b=>b.onclick=()=>{ bioNote=bioNote===b.dataset.bio?'':b.dataset.bio; render(); });
+    return;
+  }
+
+  const cur=PANELS[PANELS.length-1], prev=PANELS.length>1?PANELS[PANELS.length-2]:null;
+  c.insertAdjacentHTML('beforeend',
+    `<div class="day-sep">Latest panel · ${cur.date}${prev?' &nbsp;vs&nbsp; '+prev.date:' · no earlier panel to compare'}</div>`);
+
+  MARKERS.forEach(mk=>{
+    const a=cur.values[mk.k]; if(!a) return;
+    const b=prev?prev.values[mk.k]:null;
+    let delta='<span class="flat">—</span>';
+    if(b){
+      const d=a.v-b.v;
+      const cls=Math.abs(d)<1e-9?'flat':(d>0?'up':'down');
+      const arrow=Math.abs(d)<1e-9?'':(d>0?'▲':'▼');
+      const dv=Math.abs(d)>=10?d.toFixed(0):d.toFixed(1);
+      delta=`<span class="${cls}">${arrow} ${d>0?'+':''}${dv}</span>`;
+    }
+    const inR=a.v>=mk.lo&&a.v<=mk.hi;
+    c.insertAdjacentHTML('beforeend',
+      `<div class="mk">
+        <div class="mk-name">${mk.n}
+          <div class="mk-sub ${inR?'inrange':'outrange'}">${inR?'in range':'outside range'} · ${mk.lo}–${mk.hi===999?'∞':mk.hi} ${mk.u}</div>
+        </div>
+        <span class="mk-val">${a.v}<small>${esc(a.unit)}</small></span>
+        <span class="mk-delta">${delta}</span>
+      </div>`);
+  });
+
+  c.insertAdjacentHTML('beforeend','<div class="day-sep">Panel history</div>');
+  PANELS.slice().reverse().forEach(p=>{
+    c.insertAdjacentHTML('beforeend',
+      `<div class="panel-row">
+        <div class="panel-date">${p.date}<div class="panel-meta">${esc(p.name)} · ${p.found} markers</div></div>
+        <div class="acts"><button class="ico del" data-pdel="${p.id}">✕</button></div>
+      </div>`);
+  });
+
+  c.querySelectorAll('[data-bio]').forEach(b=>b.onclick=()=>{ bioNote=bioNote===b.dataset.bio?'':b.dataset.bio; render(); });
+  c.querySelectorAll('[data-pdel]').forEach(b=>b.onclick=()=>{
+    const i=PANELS.findIndex(p=>p.id===b.dataset.pdel);
+    if(i>-1&&confirm('Delete the panel from '+PANELS[i].date+'?')){ PANELS.splice(i,1); render(); }
+  });
+}
+
+function renderProgress(){
+  if(activeTab==='cal'||activeTab==='bio') return;
+  let total,done;
+  const mr=marks(state), ms=marks(suppState);
+  if(activeTab==='routine'){ const v=activeRoutinesOn(viewDate); total=v.length; done=v.filter(r=>mr[r.id]).length; }
+  else if(activeTab==='supps'){ const v=allSupps(); total=v.length; done=v.filter(s=>ms[s.id]).length; }
+  else { const vr=activeRoutinesOn(viewDate), vs=allSupps();
+    total=vr.length+vs.length; done=vr.filter(r=>mr[r.id]).length+vs.filter(s=>ms[s.id]).length; }
+  const pct=total?Math.round(done/total*100):0;
+  document.getElementById('bar').style.width=pct+'%';
+  document.getElementById('pct').textContent=pct+'%';
+}
+
+function renderFooter(){
+  const f=document.getElementById('footer');
+  if(activeTab==='agenda')
+    f.innerHTML=`<button class="btn-ghost" onclick="setTab('cal')">Month view</button>
+      <button class="btn-primary" onclick="exportEverything()">Export day → Calendar</button>`;
+  else if(activeTab==='routine')
+    f.innerHTML=`<button class="btn-ghost" onclick="resetDay()">Reset</button>
+      <button class="btn-primary" onclick="exportAllRoutines()">Export day → Calendar</button>`;
+  else if(activeTab==='supps')
+    f.innerHTML=`<button class="btn-ghost" onclick="resetSupps()">Reset</button>
+      <button class="btn-primary" onclick="exportSupps()">Export supplements</button>`;
+  else if(activeTab==='bio')
+    f.innerHTML=`<button class="btn-ghost" onclick="setTab('agenda')">Back to agenda</button>
+      <button class="btn-primary" onclick="document.getElementById('pdfInput').click()">Upload biomarkers</button>`;
+  else
+    f.innerHTML=`<button class="btn-ghost" onclick="clearImports()">Clear imports</button>
+      <button class="btn-primary" onclick="exportEverything()">Export day → Calendar</button>`;
+}
+function resetDay(){ state[dk()]={}; optOn[dk()]={}; render(); }
+function resetSupps(){ suppState[dk()]={}; render(); }
+function clearImports(){ if(confirm('Remove all imported events?')){ IMPORTED=[]; importInfo=''; render(); } }
+
+/* ---------- SHEET ---------- */
+let isOptional=false;
+function setKind(v){
+  isOptional=!!v;
+  document.getElementById('seg-std').classList.toggle('on',!isOptional);
+  document.getElementById('seg-opt').classList.toggle('on',isOptional);
+}
+function setMode(m){
+  mode=m;
+  document.getElementById('seg-rep').classList.toggle('on',m==='repeat');
+  document.getElementById('seg-once').classList.toggle('on',m==='once');
+  document.getElementById('repeatBox').style.display=m==='repeat'?'block':'none';
+  document.getElementById('onceBox').style.display=m==='once'?'block':'none';
+}
+function renderDows(){
+  const box=document.getElementById('dows'); box.innerHTML='';
+  DOW.forEach((d,i)=>{
+    const b=document.createElement('button'); b.textContent=d;
+    b.className=selDows.includes(i)?'on':'';
+    b.onclick=()=>{ selDows=selDows.includes(i)?selDows.filter(x=>x!==i):selDows.concat(i); renderDows(); };
+    box.appendChild(b);
+  });
+}
+function openSheet(kind,ref){
+  const tab = (activeTab==='cal'||activeTab==='agenda') ? 'routine' : activeTab;
+  const isR = tab==='routine';
+  editing = kind==='edit'?ref:null;
+  document.getElementById('routineFields').style.display=isR?'block':'none';
+  document.getElementById('suppFields').style.display=isR?'none':'block';
+  document.getElementById('deleteBtn').style.display=kind==='edit'?'block':'none';
+  document.getElementById('saveBtn').textContent=kind==='edit'?'Save':'Add';
+  document.getElementById('sheetTitle').textContent=(kind==='edit'?'Edit ':'Add ')+(isR?'routine':'supplement');
+  document.getElementById('sheetHint').textContent=kind==='edit'?'Change any detail below.'
+    :(isR?'Optional ones stay greyed out until you switch them on for a day.':'Add a supplement to a time block.');
+  if(isR){
+    const r=editing?ROUTINES.find(x=>x.id===editing):null;
+    document.getElementById('f-name').value=r?r.title:'';
+    document.getElementById('f-time').value=r?r.time:'08:00';
+    document.getElementById('f-dur').value=r?r.dur:15;
+    document.getElementById('f-cat').value=r?r.cat:'health';
+    document.getElementById('f-date').value=r&&r.date?r.date:dk();
+    setKind(r?!!r.optional:false);
+    if(r&&r.date){ setMode('once'); selDows=[0,1,2,3,4,5,6]; }
+    else if((activeTab==='cal'||activeTab==='agenda')&&kind==='add'){ setMode('once'); selDows=[0,1,2,3,4,5,6]; }
+    else { setMode('repeat'); selDows=r&&r.days?[...r.days]:[0,1,2,3,4,5,6]; }
+    renderDows();
+  } else {
+    const sel=document.getElementById('f-block');
+    sel.innerHTML=SUPP_BLOCKS.map(b=>`<option value="${b.id}">${esc(b.title)}</option>`).join('');
+    if(editing){
+      const [bid,iid]=editing.split(':');
+      const it=SUPP_BLOCKS.find(b=>b.id===bid).items.find(x=>x.id===iid);
+      document.getElementById('f-name').value=it.name;
+      document.getElementById('f-sub').value=it.sub==='—'?'':it.sub;
+      document.getElementById('f-dose').value=it.dose==='—'?'':it.dose;
+      sel.value=bid;
+    } else { ['f-name','f-sub','f-dose'].forEach(i=>document.getElementById(i).value=''); }
+  }
+  document.getElementById('overlay').classList.add('open');
+}
+function closeSheet(){ document.getElementById('overlay').classList.remove('open'); editing=null; }
+
+function saveItem(){
+  const name=document.getElementById('f-name').value.trim();
+  if(!name){ document.getElementById('f-name').focus(); return; }
+  const isR = (activeTab==='cal'||activeTab==='agenda') ? true : activeTab==='routine';
+  if(isR){
+    const data={title:name,time:document.getElementById('f-time').value||'08:00',
+      dur:parseInt(document.getElementById('f-dur').value)||15,
+      cat:document.getElementById('f-cat').value, optional:isOptional};
+    if(mode==='once'){ data.date=document.getElementById('f-date').value||dk(); data.days=undefined; }
+    else { data.date=undefined; data.days=selDows.length===7?undefined:[...selDows].sort(); }
+    if(editing) Object.assign(ROUTINES.find(r=>r.id===editing),data);
+    else ROUTINES.push({id:'c'+Date.now(),...data});
+  } else {
+    const bid=document.getElementById('f-block').value;
+    const data={name,sub:document.getElementById('f-sub').value.trim()||'—',
+      dose:document.getElementById('f-dose').value.trim()||'—'};
+    if(editing){
+      const [obid,iid]=editing.split(':');
+      const ob=SUPP_BLOCKS.find(b=>b.id===obid);
+      const idx=ob.items.findIndex(x=>x.id===iid);
+      const item={...ob.items[idx],...data};
+      if(obid!==bid){ ob.items.splice(idx,1); SUPP_BLOCKS.find(b=>b.id===bid).items.push(item); }
+      else ob.items[idx]=item;
+    } else SUPP_BLOCKS.find(b=>b.id===bid).items.push({id:'c'+Date.now(),...data});
+  }
+  closeSheet(); render();
+}
+function deleteCurrent(){
+  if(!editing) return;
+  const isR=(activeTab==='cal'?'routine':activeTab)==='routine';
+  if(isR){ const i=ROUTINES.findIndex(r=>r.id===editing); if(i>-1) ROUTINES.splice(i,1); }
+  else { const [bid,iid]=editing.split(':'); const b=SUPP_BLOCKS.find(x=>x.id===bid);
+    const i=b.items.findIndex(x=>x.id===iid); if(i>-1) b.items.splice(i,1); }
+  closeSheet(); render();
+}
+function calFromSheet(){
+  const name=document.getElementById('f-name').value.trim(); if(!name) return;
+  const t=document.getElementById('f-time').value||'08:00';
+  const d=parseInt(document.getElementById('f-dur').value)||15;
+  const day=mode==='once'?new Date(document.getElementById('f-date').value+'T00:00:00'):viewDate;
+  download(wrapCal([vevent('quick'+Date.now(),name,t,d,'',day)]),'event.ics');
+}
+document.getElementById('overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeSheet(); });
+
+/* ---------- ICS EXPORT ---------- */
+const icsDate=d=>d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())+'T'+
+  pad(d.getUTCHours())+pad(d.getUTCMinutes())+'00Z';
+function vevent(uid,title,time,durMin,note,onDay){
+  const base=onDay||viewDate;
+  const [h,m]=time.split(':').map(Number);
+  const start=new Date(base); start.setHours(h,m,0,0);
+  const end=new Date(start.getTime()+durMin*60000);
+  return ['BEGIN:VEVENT','UID:'+uid+'-'+key(base)+'@routine','DTSTAMP:'+icsDate(new Date()),
+    'DTSTART:'+icsDate(start),'DTEND:'+icsDate(end),'SUMMARY:'+title,
+    ...(note?['DESCRIPTION:'+note]:[]),
+    'BEGIN:VALARM','TRIGGER:-PT5M','ACTION:DISPLAY','DESCRIPTION:'+title,'END:VALARM','END:VEVENT'].join('\r\n');
+}
+const wrapCal=e=>['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Routine//EN','CALSCALE:GREGORIAN',
+  'METHOD:PUBLISH',...e,'END:VCALENDAR'].join('\r\n');
+function download(ics,name){
+  const b=new Blob([ics],{type:'text/calendar;charset=utf-8'});
+  const u=URL.createObjectURL(b), a=document.createElement('a');
+  a.href=u; a.download=name; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(u),1000);
+}
+const exportAllRoutines=()=>download(wrapCal(activeRoutinesOn(viewDate).map(r=>vevent(r.id,r.title,r.time,r.dur))),'routine-'+dk()+'.ics');
+function exportSupps(){
+  const ev=SUPP_BLOCKS.filter(b=>b.items.length).map(b=>{
+    const list=b.items.map(i=>i.name+' ('+i.dose+')').join(', ');
+    return vevent('supp-'+b.id,'Supplements: '+b.title,b.time,10,list+(b.wait?' — '+b.wait:''));
+  });
+  download(wrapCal(ev),'supplements-'+dk()+'.ics');
+}
+function exportEverything(){
+  const ev=activeRoutinesOn(viewDate).map(r=>vevent(r.id,r.title,r.time,r.dur));
+  SUPP_BLOCKS.filter(b=>b.items.length).forEach(b=>ev.push(
+    vevent('supp-'+b.id,'Supplements: '+b.title,b.time,10,b.items.map(i=>i.name+' ('+i.dose+')').join(', '))));
+  download(wrapCal(ev),'day-'+dk()+'.ics');
+}
+
+loadAll();
+render();
+if(SUB_URL) subFetch(true);
+</script>
+</body>
+</html>
