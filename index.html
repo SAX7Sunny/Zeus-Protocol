@@ -88,7 +88,7 @@
   .tag { font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; font-weight:700; }
   .tag.health{color:var(--frost);} .tag.sport{color:var(--clay);}
   .tag.mental{color:var(--moss);} .tag.planning{color:var(--amber);}
-  .tag.imported{color:var(--frost);} .tag.once{color:var(--amber);}
+  .tag.imported{color:var(--frost);} .tag.event{color:var(--frost);} .tag.once{color:var(--amber);}
   .dose { flex-shrink:0; font-size:12.5px; font-weight:700; color:var(--clay);
     background:var(--clay-soft); padding:4px 8px; border-radius:7px; }
 
@@ -353,7 +353,7 @@
       <div class="field"><label>Category</label>
         <select id="f-cat">
           <option value="health">Health</option><option value="sport">Sport</option>
-          <option value="mental">Mental</option><option value="planning">Planning</option>
+          <option value="mental">Mental</option><option value="planning">Others</option>
         </select></div>
       <label style="display:block;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600;">Kind</label>
       <div class="seg">
@@ -376,7 +376,6 @@
         <div class="field"><label>Start</label><input id="e-time" type="time" value="09:00"></div>
         <div class="field"><label>Duration · min</label><input id="e-dur" type="number" value="60" min="1"></div>
       </div>
-      <div class="field"><label>Notes (optional)</label><input id="e-note" placeholder="Location, agenda, …"></div>
       <div class="note" id="e-target" style="margin:0">Saves to your Google Calendar.</div>
     </div>
 
@@ -398,7 +397,9 @@
 
 <script>
 const DOW=['S','M','T','W','T','F','S'];
-const CATS={all:'All',health:'Health',sport:'Sport',mental:'Mental',planning:'Planning'};
+// Key stays 'planning' so existing saved routines keep working; only the label changed.
+const CATS={all:'All',health:'Health',sport:'Sport',mental:'Mental',planning:'Others'};
+const LABEL={...CATS, event:'Event'};   // events are not a filterable category
 
 const DEFAULT_ROUTINES=[
  {id:'morning-walk',title:'Morning walk',time:'06:45',dur:15,cat:'health'},
@@ -879,6 +880,7 @@ function setTab(t){
     t==='agenda'?'Agenda':t==='routine'?'Daily Routine':t==='supps'?'Supplements':t==='cal'?'Calendar':'Bio Analysis';
   document.getElementById('progWrap').style.display = (t==='cal'||t==='bio')?'none':'block';
   document.querySelector('.daynav').style.display = (t==='cal'||t==='bio')?'none':'flex';
+  document.querySelector('.fab').style.display = t==='bio'?'none':'block';
   window.scrollTo(0,0);
   render();
 }
@@ -888,6 +890,7 @@ function renderFilters(){
   if(activeTab!=='routine'){ box.style.display='none'; return; }
   box.style.display='flex';
   Object.entries(CATS).forEach(([k,v])=>{
+    if(k==='event') return;
     const b=document.createElement('button');
     b.className='chip'+(activeFilter===k?' active':''); b.textContent=v;
     b.onclick=()=>{ activeFilter=k; render(); }; box.appendChild(b);
@@ -921,7 +924,7 @@ function renderRoutine(c){
       <div class="check ${done?'on':''}${active?'':' plus'}" data-${active?'id':'opt'}="${r.id}"></div>
       <div class="rbody">
         <div class="rtitle">${esc(r.title)}</div>
-        <div class="rmeta"><span class="tag ${r.cat}">${CATS[r.cat]}</span>
+        <div class="rmeta"><span class="tag ${r.cat}">${LABEL[r.cat]}</span>
           <span>${r.time} · ${r.dur} min</span>${r.date?'<span class="tag once">Single</span>':''}${pill}${streakPill(r)}</div>
       </div>
       <div class="acts">
@@ -999,7 +1002,7 @@ function renderAgenda(c){
       row.innerHTML=`<span class="ag-time">${r.time}<small>${r.dur} min</small></span>
         <div class="check ${done?'on':''}${active?'':' plus'}" data-${active?'id':'opt'}="${r.id}"></div>
         <div class="rbody"><div class="rtitle">${esc(r.title)}</div>
-          <div class="rmeta"><span class="tag ${r.cat}">${CATS[r.cat]}</span>${pill}${streakPill(r)}</div></div>
+          <div class="rmeta"><span class="tag ${r.cat}">${LABEL[r.cat]}</span>${pill}${streakPill(r)}</div></div>
         <div class="acts"><button class="ico edit" data-edit="${r.id}">✎</button></div>`;
     } else if(a.kind==='supp'){
       const b=a.ref, tot=b.items.length, dn=b.items.filter(i=>ms[i.id]).length, all=dn===tot;
@@ -1323,18 +1326,35 @@ function renderDows(){
     box.appendChild(b);
   });
 }
+let sheetType='routine';
+
+function sheetTypeFor(kind,ref){
+  if(activeTab==='supps') return 'supp';
+  if(kind==='edit'&&ref){
+    const r=ROUTINES.find(x=>x.id===ref);
+    return (r&&r.cat==='event') ? 'event' : 'routine';
+  }
+  return (activeTab==='agenda'||activeTab==='cal') ? 'event' : 'routine';
+}
+
 function openSheet(kind,ref){
-  const tab = (activeTab==='cal'||activeTab==='agenda') ? 'routine' : activeTab;
-  const isR = tab==='routine';
-  editing = kind==='edit'?ref:null;
-  document.getElementById('routineFields').style.display=isR?'block':'none';
-  document.getElementById('suppFields').style.display=isR?'none':'block';
+  sheetType=sheetTypeFor(kind,ref);
+  editing=kind==='edit'?ref:null;
+  document.getElementById('routineFields').style.display=sheetType==='routine'?'block':'none';
+  document.getElementById('suppFields').style.display=sheetType==='supp'?'block':'none';
+  document.getElementById('eventFields').style.display=sheetType==='event'?'block':'none';
   document.getElementById('deleteBtn').style.display=kind==='edit'?'block':'none';
   document.getElementById('saveBtn').textContent=kind==='edit'?'Save':'Add';
-  document.getElementById('sheetTitle').textContent=(kind==='edit'?'Edit ':'Add ')+(isR?'routine':'supplement');
-  document.getElementById('sheetHint').textContent=kind==='edit'?'Change any detail below.'
-    :(isR?'Optional ones stay greyed out until you switch them on for a day.':'Add a supplement to a time block.');
-  if(isR){
+
+  const noun = sheetType==='routine'?'routine':sheetType==='supp'?'supplement':'event';
+  document.getElementById('sheetTitle').textContent=(kind==='edit'?'Edit ':'Add ')+noun;
+  document.getElementById('sheetHint').textContent =
+    kind==='edit' ? 'Change any detail below.'
+    : sheetType==='event' ? 'A one-off entry for a single day.'
+    : sheetType==='supp' ? 'Add a supplement to a time block.'
+    : 'Optional ones stay greyed out until you switch them on for a day.';
+
+  if(sheetType==='routine'){
     const r=editing?ROUTINES.find(x=>x.id===editing):null;
     document.getElementById('f-name').value=r?r.title:'';
     document.getElementById('f-time').value=r?r.time:'08:00';
@@ -1343,9 +1363,14 @@ function openSheet(kind,ref){
     document.getElementById('f-date').value=r&&r.date?r.date:dk();
     setKind(r?!!r.optional:false);
     if(r&&r.date){ setMode('once'); selDows=[0,1,2,3,4,5,6]; }
-    else if((activeTab==='cal'||activeTab==='agenda')&&kind==='add'){ setMode('once'); selDows=[0,1,2,3,4,5,6]; }
     else { setMode('repeat'); selDows=r&&r.days?[...r.days]:[0,1,2,3,4,5,6]; }
     renderDows();
+  } else if(sheetType==='event'){
+    const r=editing?ROUTINES.find(x=>x.id===editing):null;
+    document.getElementById('f-name').value=r?r.title:'';
+    document.getElementById('e-date').value=r&&r.date?r.date:dk();
+    document.getElementById('e-time').value=r?r.time:'09:00';
+    document.getElementById('e-dur').value=r?r.dur:60;
   } else {
     const sel=document.getElementById('f-block');
     sel.innerHTML=SUPP_BLOCKS.map(b=>`<option value="${b.id}">${esc(b.title)}</option>`).join('');
@@ -1365,8 +1390,21 @@ function closeSheet(){ document.getElementById('overlay').classList.remove('open
 function saveItem(){
   const name=document.getElementById('f-name').value.trim();
   if(!name){ document.getElementById('f-name').focus(); return; }
-  const isR = (activeTab==='cal'||activeTab==='agenda') ? true : activeTab==='routine';
-  if(isR){
+
+  if(sheetType==='event'){
+    const data={ title:name,
+      time:document.getElementById('e-time').value||'09:00',
+      dur:parseInt(document.getElementById('e-dur').value)||60,
+      cat:'event', optional:false,
+      date:document.getElementById('e-date').value||dk(), days:undefined };
+    if(editing) Object.assign(ROUTINES.find(r=>r.id===editing),data);
+    else ROUTINES.push({id:'e'+Date.now(),...data});
+    const [y,m,d]=data.date.split('-').map(Number);
+    viewDate=new Date(y,m-1,d); viewDate.setHours(0,0,0,0);
+    closeSheet(); render(); return;
+  }
+
+  if(sheetType==='routine'){
     const data={title:name,time:document.getElementById('f-time').value||'08:00',
       dur:parseInt(document.getElementById('f-dur').value)||15,
       cat:document.getElementById('f-cat').value, optional:isOptional};
@@ -1391,18 +1429,13 @@ function saveItem(){
 }
 function deleteCurrent(){
   if(!editing) return;
-  const isR=(activeTab==='cal'?'routine':activeTab)==='routine';
-  if(isR){ const i=ROUTINES.findIndex(r=>r.id===editing); if(i>-1) ROUTINES.splice(i,1); }
-  else { const [bid,iid]=editing.split(':'); const b=SUPP_BLOCKS.find(x=>x.id===bid);
-    const i=b.items.findIndex(x=>x.id===iid); if(i>-1) b.items.splice(i,1); }
+  if(sheetType==='supp'){
+    const [bid,iid]=editing.split(':'); const b=SUPP_BLOCKS.find(x=>x.id===bid);
+    const i=b.items.findIndex(x=>x.id===iid); if(i>-1) b.items.splice(i,1);
+  } else {
+    const i=ROUTINES.findIndex(r=>r.id===editing); if(i>-1) ROUTINES.splice(i,1);
+  }
   closeSheet(); render();
-}
-function calFromSheet(){
-  const name=document.getElementById('f-name').value.trim(); if(!name) return;
-  const t=document.getElementById('f-time').value||'08:00';
-  const d=parseInt(document.getElementById('f-dur').value)||15;
-  const day=mode==='once'?new Date(document.getElementById('f-date').value+'T00:00:00'):viewDate;
-  download(wrapCal([vevent('quick'+Date.now(),name,t,d,'',day)]),'event.ics');
 }
 document.getElementById('overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeSheet(); });
 
