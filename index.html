@@ -289,6 +289,8 @@
     -webkit-appearance:none; appearance:none; min-width:0; max-width:100%; }
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  .seclabel { display:block; font-size:12px; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:6px; font-weight:600; }
   .seg { display:flex; gap:8px; margin-bottom:14px; }
   .seg button { flex:1; padding:11px; border-radius:10px; border:1px solid var(--line); background:var(--bg);
     color:var(--muted); font-size:14px; font-weight:600; }
@@ -371,12 +373,17 @@
     </div>
 
     <div id="eventFields" style="display:none">
-      <div class="field"><label>Date</label><input id="e-date" type="date"></div>
       <div class="row2">
         <div class="field"><label>Start</label><input id="e-time" type="time" value="09:00"></div>
         <div class="field"><label>Duration · min</label><input id="e-dur" type="number" value="60" min="1"></div>
       </div>
-      <div class="note" id="e-target" style="margin:0">Saves to your Google Calendar.</div>
+      <label class="seclabel">Schedule</label>
+      <div class="seg">
+        <button id="eseg-once" onclick="setEMode('once')">Single date</button>
+        <button id="eseg-rep" onclick="setEMode('repeat')">Repeats</button>
+      </div>
+      <div id="eOnceBox"><div class="field"><input id="e-date" type="date"></div></div>
+      <div id="eRepeatBox" style="display:none"><div class="dows" id="edows"></div></div>
     </div>
 
     <div id="suppFields" style="display:none">
@@ -396,7 +403,10 @@
 </div>
 
 <script>
-const DOW=['S','M','T','W','T','F','S'];
+// Display order is Monday-first to match the month grid; the stored values
+// stay JS day numbers (0 = Sunday).
+const DOW_ORDER=[1,2,3,4,5,6,0];
+const DOW_LABEL={0:'S',1:'M',2:'T',3:'W',4:'T',5:'F',6:'S'};
 // Key stays 'planning' so existing saved routines keep working; only the label changed.
 const CATS={all:'All',health:'Health',sport:'Sport',mental:'Mental',planning:'Others'};
 const LABEL={...CATS, event:'Event'};   // events are not a filterable category
@@ -925,7 +935,7 @@ function renderRoutine(c){
       <div class="rbody">
         <div class="rtitle">${esc(r.title)}</div>
         <div class="rmeta"><span class="tag ${r.cat}">${LABEL[r.cat]}</span>
-          <span>${r.time} · ${r.dur} min</span>${r.date?'<span class="tag once">Single</span>':''}${pill}${streakPill(r)}</div>
+          <span>${r.time} · ${r.dur} min</span>${r.date?'<span class="tag once">Single</span>':(r.cat==='event'?'<span class="tag once">Repeats</span>':'')}${pill}${streakPill(r)}</div>
       </div>
       <div class="acts">
         <button class="ico edit" data-edit="${r.id}" aria-label="Edit">✎</button>
@@ -1305,6 +1315,15 @@ function clearImports(){ if(confirm('Remove all imported events?')){ IMPORTED=[]
 
 /* ---------- SHEET ---------- */
 let isOptional=false;
+let eMode='once', eSelDows=[1,2,3,4,5,6,0];
+function setEMode(m){
+  eMode=m;
+  document.getElementById('eseg-once').classList.toggle('on',m==='once');
+  document.getElementById('eseg-rep').classList.toggle('on',m==='repeat');
+  document.getElementById('eOnceBox').style.display=m==='once'?'block':'none';
+  document.getElementById('eRepeatBox').style.display=m==='repeat'?'block':'none';
+  if(m==='repeat') renderEDows();
+}
 function setKind(v){
   isOptional=!!v;
   document.getElementById('seg-std').classList.toggle('on',!isOptional);
@@ -1317,15 +1336,17 @@ function setMode(m){
   document.getElementById('repeatBox').style.display=m==='repeat'?'block':'none';
   document.getElementById('onceBox').style.display=m==='once'?'block':'none';
 }
-function renderDows(){
-  const box=document.getElementById('dows'); box.innerHTML='';
-  DOW.forEach((d,i)=>{
-    const b=document.createElement('button'); b.textContent=d;
-    b.className=selDows.includes(i)?'on':'';
-    b.onclick=()=>{ selDows=selDows.includes(i)?selDows.filter(x=>x!==i):selDows.concat(i); renderDows(); };
+function dowButtons(boxId, get, set){
+  const box=document.getElementById(boxId); box.innerHTML='';
+  DOW_ORDER.forEach(i=>{
+    const b=document.createElement('button'); b.textContent=DOW_LABEL[i];
+    b.className=get().includes(i)?'on':'';
+    b.onclick=()=>{ const cur=get(); set(cur.includes(i)?cur.filter(x=>x!==i):cur.concat(i)); };
     box.appendChild(b);
   });
 }
+function renderDows(){ dowButtons('dows',()=>selDows,v=>{ selDows=v; renderDows(); }); }
+function renderEDows(){ dowButtons('edows',()=>eSelDows,v=>{ eSelDows=v; renderEDows(); }); }
 let sheetType='routine';
 
 function sheetTypeFor(kind,ref){
@@ -1371,6 +1392,9 @@ function openSheet(kind,ref){
     document.getElementById('e-date').value=r&&r.date?r.date:dk();
     document.getElementById('e-time').value=r?r.time:'09:00';
     document.getElementById('e-dur').value=r?r.dur:60;
+    if(r && !r.date){ eSelDows=r.days?[...r.days]:[1,2,3,4,5,6,0]; setEMode('repeat'); }
+    else { eSelDows=[1,2,3,4,5,6,0]; setEMode('once'); }
+    renderEDows();
   } else {
     const sel=document.getElementById('f-block');
     sel.innerHTML=SUPP_BLOCKS.map(b=>`<option value="${b.id}">${esc(b.title)}</option>`).join('');
@@ -1395,12 +1419,19 @@ function saveItem(){
     const data={ title:name,
       time:document.getElementById('e-time').value||'09:00',
       dur:parseInt(document.getElementById('e-dur').value)||60,
-      cat:'event', optional:false,
-      date:document.getElementById('e-date').value||dk(), days:undefined };
+      cat:'event', optional:false };
+    if(eMode==='once'){
+      data.date=document.getElementById('e-date').value||dk(); data.days=undefined;
+    } else {
+      data.date=undefined;
+      data.days=eSelDows.length===7?undefined:[...eSelDows].sort((a,b)=>a-b);
+    }
     if(editing) Object.assign(ROUTINES.find(r=>r.id===editing),data);
     else ROUTINES.push({id:'e'+Date.now(),...data});
-    const [y,m,d]=data.date.split('-').map(Number);
-    viewDate=new Date(y,m-1,d); viewDate.setHours(0,0,0,0);
+    if(data.date){                                   // zum Datum springen
+      const [y,m,d]=data.date.split('-').map(Number);
+      viewDate=new Date(y,m-1,d); viewDate.setHours(0,0,0,0);
+    }
     closeSheet(); render(); return;
   }
 
