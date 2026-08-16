@@ -159,6 +159,9 @@
   .dot.once { background:var(--amber); }
   .dot.sport { background:var(--clay); }
   .month-hint { text-align:center; color:var(--faint); font-size:12.5px; padding:6px 0 26px; }
+  .earlier-btn { display:block; width:100%; margin:0 0 14px; font-size:13px; padding:7px 14px;
+    border-radius:20px; border:1px solid var(--line); background:var(--surface); color:var(--muted);
+    white-space:nowrap; font-weight:500; }
 
   /* Agenda */
   .ag-time { flex-shrink:0; width:50px; font-size:13px; font-weight:700; color:var(--frost); line-height:1.3; }
@@ -1057,7 +1060,7 @@ function deleteEventById(id){
 }
 
 /* ---------- MONTH VIEW ---------- */
-let monthsBack=6, monthsFwd=12, monthScrollHooked=false;
+let monthsBack=0, monthsFwd=12, monthScrollHooked=false;
 const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function dayFlags(d){
@@ -1141,6 +1144,28 @@ function refreshDots(){
   });
 }
 
+function bindDayCells(root){
+  root.querySelectorAll('[data-day]:not([data-bound])').forEach(b=>{
+    b.dataset.bound='1';
+    b.onclick=()=>{
+      const [y,m,d]=b.dataset.day.split('-').map(Number);
+      viewDate=new Date(y,m-1,d); viewDate.setHours(0,0,0,0);
+      setTab('agenda');
+    };
+  });
+}
+
+function loadEarlier(){
+  const w=document.getElementById('monthWrap'); if(!w) return;
+  const before=document.body.scrollHeight;
+  let add=''; for(let i=monthsBack+6;i>=monthsBack+1;i--) add+=monthBlock(-i);
+  w.insertAdjacentHTML('afterbegin',add);
+  monthsBack+=6;
+  bindDayCells(w);
+  const after=document.body.scrollHeight;
+  window.scrollBy(0, after-before);
+}
+
 function renderCalendar(c){
   c.insertAdjacentHTML('beforeend', subCardHTML());
   c.insertAdjacentHTML('beforeend',
@@ -1155,6 +1180,8 @@ function renderCalendar(c){
       <div class="ci-txt">Or import a one-off <strong>.ics</strong> export${importInfo?'<br>'+esc(importInfo):''}</div>
       <button onclick="document.getElementById('fileInput').click()">Import</button>
     </div>`);
+  c.insertAdjacentHTML('beforeend','<button class="earlier-btn" onclick="loadEarlier()">‹ Earlier months</button>');
+
   const wrap=document.createElement('div'); wrap.id='monthWrap';
   let html='';
   for(let i=-monthsBack;i<=monthsFwd;i++) html+=monthBlock(i);
@@ -1162,17 +1189,7 @@ function renderCalendar(c){
   c.appendChild(wrap);
   c.insertAdjacentHTML('beforeend','<div class="month-hint">Keep scrolling for more months</div>');
 
-  wrap.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>{
-    const [y,m,d]=b.dataset.day.split('-').map(Number);
-    viewDate=new Date(y,m-1,d); viewDate.setHours(0,0,0,0);
-    setTab('agenda');
-  });
-
-  setTimeout(()=>{
-    const el=document.getElementById('m0');
-    if(el){ const hh=document.querySelector('header').offsetHeight;
-      window.scrollTo({top:el.offsetTop-hh-6,behavior:'instant'}); }
-  },0);
+  bindDayCells(wrap);
 
   if(!monthScrollHooked){
     monthScrollHooked=true;
@@ -1183,11 +1200,7 @@ function renderCalendar(c){
         if(w.dataset.busy) return; w.dataset.busy='1';
         let add=''; for(let i=monthsFwd+1;i<=monthsFwd+6;i++) add+=monthBlock(i);
         monthsFwd+=6; w.insertAdjacentHTML('beforeend',add);
-        w.querySelectorAll('[data-day]:not([data-bound])').forEach(b=>{
-          b.dataset.bound='1';
-          b.onclick=()=>{ const [y,m,d]=b.dataset.day.split('-').map(Number);
-            viewDate=new Date(y,m-1,d); viewDate.setHours(0,0,0,0); setTab('agenda'); };
-        });
+        bindDayCells(w);
         delete w.dataset.busy;
       }
     },{passive:true});
