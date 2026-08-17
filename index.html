@@ -1366,8 +1366,6 @@ function renderAgenda(c){
     n.innerHTML='<span class="lbl">NOW '+nowT+'</span><span class="ln"></span>';
     c.appendChild(n);
   }
-  if(!IMPORTED.length) c.insertAdjacentHTML('beforeend',
-    '<div class="note">Your Apple Calendar events will appear here once imported. Open the <strong>Calendar</strong> tab to import an .ics file.</div>');
 
   c.querySelectorAll('[data-id]').forEach(x=>x.onclick=()=>{ const m=marks(state); m[x.dataset.id]=!m[x.dataset.id]; render(); });
   c.querySelectorAll('[data-opt]').forEach(x=>x.onclick=e=>{ e.stopPropagation(); toggleOpt(x.dataset.opt); });
