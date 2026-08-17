@@ -1064,8 +1064,10 @@ function parseICS(text){
       if(cur&&cur.start){
         const dur=cur.end?Math.max(1,Math.round((cur.end-cur.start)/60000)):(cur.allDay?1440:60);
         const title=cur.title||'(no title)';
-        const id=cur.uid ? 'u'+cur.uid : stableHash(title+'|'+cur.start.getTime());
-        out.push({id,title,start:cur.start,dur,allDay:!!cur.allDay,rrule:cur.rrule||null,src:'ics'});
+        const uid=cur.uid||null;
+        const id=uid ? 'u'+uid : stableHash(title+'|'+cur.start.getTime());
+        out.push({id,uid,title,start:cur.start,dur,allDay:!!cur.allDay,rrule:cur.rrule||null,
+          recurrenceId:cur.recurrenceId||null,exdates:cur.exdates||[],src:'ics'});
       }
       cur=null; continue;
     }
@@ -1077,17 +1079,47 @@ function parseICS(text){
     else if(name==='UID') cur.uid=val.trim();
     else if(name==='DTSTART'){ const p=parseICSDate(val); if(p){ cur.start=p.date; cur.allDay=p.allDay; } }
     else if(name==='DTEND'){ const p=parseICSDate(val); if(p) cur.end=p.date; }
+    else if(name==='RECURRENCE-ID'){ const p=parseICSDate(val); if(p) cur.recurrenceId=p.date; }
+    else if(name==='EXDATE'){
+      (cur.exdates=cur.exdates||[]).push(...val.split(',').map(v=>{
+        const p=parseICSDate(v.trim()); return p?key(p.date):null;
+      }).filter(Boolean));
+    }
     else if(name==='RRULE'){
       const r={}; val.split(';').forEach(kv=>{ const [k,v2]=kv.split('='); if(k) r[k.toUpperCase()]=v2; });
       cur.rrule=r;
     }
   }
-  return out;
+
+  // A VEVENT carrying RECURRENCE-ID overrides one occurrence of the master
+  // series (same UID) — it is not a second event. Fold each override's date
+  // into its master's exdates so the master is suppressed on that day and
+  // only the (already-separate) override entry shows.
+  const overrides={};   // `${uid}|${dateKey}` -> true
+  out.forEach(e=>{ if(e.uid&&e.recurrenceId) overrides[e.uid+'|'+key(e.recurrenceId)]=true; });
+  out.forEach(e=>{
+    if(!e.uid||!e.rrule||e.recurrenceId) return;
+    Object.keys(overrides).forEach(k2=>{
+      const [ouid,odate]=k2.split('|');
+      if(ouid===e.uid&&!e.exdates.includes(odate)) e.exdates.push(odate);
+    });
+  });
+
+  // Defensive dedup: some feeds repeat the same VEVENT verbatim (or a
+  // subscription refresh briefly overlaps with a previous parse). Collapse
+  // anything sharing an identity down to one, keeping the last.
+  const dedup=new Map();
+  out.forEach(e=>{
+    const dk=e.uid ? e.uid+'|'+e.start.getTime() : e.title+'|'+e.start.getTime()+'|'+e.dur;
+    dedup.set(dk,e);
+  });
+  return [...dedup.values()];
 }
 const dayStart=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate());
 const daysBetween=(a,b)=>Math.round((dayStart(b)-dayStart(a))/86400000);
 const sameDay=(a,b)=>dayStart(a).getTime()===dayStart(b).getTime();
 function occursOn(ev,day){
+  if(ev.exdates&&ev.exdates.includes(key(day))) return false;
   const diff=daysBetween(ev.start,day);
   if(diff<0) return false;
   const r=ev.rrule;
