@@ -33,7 +33,9 @@
     padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
     max-width:640px; margin:0 auto; min-height:100vh; }
 
-  header { padding:18px 20px 0; border-bottom:1px solid var(--line);
+  /* The fixed header is out of flow, so body's safe-area padding no longer
+     clears the notch for it — it carries its own inset instead. */
+  header { padding:calc(18px + env(safe-area-inset-top)) 20px 0; border-bottom:1px solid var(--line);
     position:fixed; top:0; left:50%; transform:translateX(-50%); width:100%; max-width:640px;
     background:var(--bg); z-index:10; }
 
