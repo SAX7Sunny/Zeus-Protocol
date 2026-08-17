@@ -180,7 +180,6 @@
   .day-events { position:absolute; left:56px; right:0; top:0; bottom:0; }
   .day-block { position:absolute; border-radius:8px; padding:4px 8px; overflow:hidden;
     border-left:3px solid; box-sizing:border-box; }
-  .day-block.dim { opacity:.4; }
   .db-title { font-size:12px; font-weight:600; color:var(--ink); white-space:nowrap;
     overflow:hidden; text-overflow:ellipsis; }
   .db-time { font-size:10.5px; color:var(--muted); margin-top:1px; }
@@ -190,23 +189,23 @@
 
   /* Week view */
   .cal-view-switch { display:flex; gap:8px; margin:0 6px 14px; }
-  .wgrid-head { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; padding:0 2px 6px;
+  .wgrid-head { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:1px; padding:0 2px 4px;
     position:sticky; top:0; background:var(--bg); z-index:5; }
-  .wgrid-head div { text-align:center; font-size:11px; font-weight:700; color:var(--faint);
-    text-transform:uppercase; letter-spacing:.05em; }
-  .weekrow { margin-bottom:16px; }
-  .wk-label { font-family:Georgia,serif; font-size:13px; color:var(--muted); padding:0 6px 6px; }
-  .wgrid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; padding:0 2px; }
-  .wk-cell { min-height:92px; border-radius:10px; background:none; border:none; padding:6px 3px 4px;
+  .wgrid-head div { text-align:center; font-size:9.5px; font-weight:700; color:var(--faint);
+    text-transform:uppercase; letter-spacing:.02em; }
+  .weekrow { margin-bottom:10px; }
+  .wk-label { font-family:Georgia,serif; font-size:12px; color:var(--muted); padding:0 6px 4px; }
+  .wgrid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:1px; padding:0 2px; }
+  .wk-cell { min-width:0; min-height:64px; border-radius:8px; background:none; border:none; padding:3px 1px 2px;
     display:flex; flex-direction:column; align-items:stretch; color:var(--ink); text-align:left; }
-  .wk-daynum { align-self:center; font-size:13px; font-weight:700; width:22px; height:22px;
-    border-radius:50%; display:grid; place-items:center; margin-bottom:4px; }
+  .wk-daynum { align-self:center; font-size:11.5px; font-weight:700; width:19px; height:19px;
+    border-radius:50%; display:grid; place-items:center; margin-bottom:2px; flex-shrink:0; }
   .wk-cell.today .wk-daynum { background:var(--frost); color:var(--bg); }
   .wk-cell.sel .wk-daynum { box-shadow:inset 0 0 0 2px var(--frost); }
-  .wk-evs { display:flex; flex-direction:column; gap:2px; overflow:hidden; }
-  .wk-ev { font-size:9.5px; line-height:1.35; padding:2px 4px; border-radius:4px; border-left:2px solid;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .wk-more { font-size:9px; color:var(--faint); padding:0 4px; }
+  .wk-evs { display:flex; flex-direction:column; gap:1px; overflow:hidden; min-width:0; }
+  .wk-ev { font-size:8px; line-height:1.3; padding:1.5px 2px; border-radius:3px; border-left:2px solid;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .wk-more { font-size:7.5px; color:var(--faint); padding:0 2px; }
 
   /* Agenda */
   .ag-time { flex-shrink:0; width:50px; font-size:13px; font-weight:700; color:var(--frost); line-height:1.3; }
@@ -493,7 +492,6 @@ const DOW_LABEL={0:'S',1:'M',2:'T',3:'W',4:'T',5:'F',6:'S'};
 // Key stays 'planning' so existing saved routines keep working; only the label changed.
 const CATS={all:'All',health:'Health',sport:'Sport',mental:'Mental',planning:'Others'};
 const LABEL={...CATS, event:'Event'};   // events are not a filterable category
-const CAT_COLOR={health:'#6fc4d8',sport:'#e89b6c',mental:'#8fce8a',planning:'#d4bd6e',event:'#6fc4d8'};
 
 const DEFAULT_ROUTINES=[
  {id:'morning-walk',title:'Morning walk',time:'06:45',dur:15,cat:'health'},
@@ -1524,9 +1522,11 @@ function updateNowLine(){
 }
 
 function renderDayView(c){
-  const items=agendaOn(viewDate);
-  const allDayItems=items.filter(a=>a.kind==='event'&&a.allDay);
-  const timedItems=items.filter(a=>!(a.kind==='event'&&a.allDay));
+  // Calendar-only, on purpose — routines and supplements live in the Agenda
+  // tab; mixing them into the day timeline made it too crowded.
+  const evs=eventsOn(viewDate);
+  const allDayItems=evs.filter(e=>e.allDay);
+  const timedItems=evs.filter(e=>!e.allDay);
   const isToday=sameDay(viewDate,new Date());
 
   c.insertAdjacentHTML('beforeend',`
@@ -1537,30 +1537,16 @@ function renderDayView(c){
     </div>`);
 
   if(allDayItems.length){
-    const rows=allDayItems.map(a=>{
-      const e=a.ref, color=eventColor(e);
+    const rows=allDayItems.map(e=>{
+      const color=eventColor(e);
       return `<div class="day-allday" style="border-left-color:${color};background:${hexA(color,0.16)}">${esc(e.title)}</div>`;
     }).join('');
     c.insertAdjacentHTML('beforeend',`<div class="day-allday-strip">${rows}</div>`);
   }
 
-  const entries=timedItems.map(a=>{
-    let start,dur,title,color,dim=false,tap='';
-    if(a.kind==='routine'){
-      const r=a.ref, [h,m]=r.time.split(':').map(Number);
-      start=h*60+m; dur=r.dur; title=r.title; color=CAT_COLOR[r.cat]||'#6fc4d8';
-      dim=r.optional&&!isOptActive(r,viewDate);
-      tap=`onclick="openSheet('edit','${r.id}')"`;
-    } else if(a.kind==='supp'){
-      const b=a.ref, [h,m]=b.time.split(':').map(Number);
-      start=h*60+m; dur=10; title='Supplements · '+b.title; color='#6fc4d8';
-      tap=`onclick="setTab('supps')"`;
-    } else {
-      const e=a.ref;
-      start=e.start.getHours()*60+e.start.getMinutes(); dur=e.dur; title=e.title;
-      color=eventColor(e);
-    }
-    return {start,end:start+Math.max(dur,1),dur,title,color,dim,tap};
+  const entries=timedItems.map(e=>{
+    const start=e.start.getHours()*60+e.start.getMinutes();
+    return {start,end:start+Math.max(e.dur,1),dur:e.dur,title:e.title,color:eventColor(e)};
   });
   layoutDay(entries);
 
@@ -1569,9 +1555,9 @@ function renderDayView(c){
     const widthPct=100/en.colCount, leftPct=widthPct*en.col;
     const endMin=en.start+en.dur;
     const timeLbl=`${pad(Math.floor(en.start/60)%24)}:${pad(en.start%60)}–${pad(Math.floor(endMin/60)%24)}:${pad(endMin%60)}`;
-    return `<div class="day-block${en.dim?' dim':''}" style="top:${top}px;height:${height}px;
+    return `<div class="day-block" style="top:${top}px;height:${height}px;
       left:calc(${leftPct}% + 2px);width:calc(${widthPct}% - 4px);
-      border-left-color:${en.color};background:${hexA(en.color,0.16)};cursor:${en.tap?'pointer':'default'}" ${en.tap}>
+      border-left-color:${en.color};background:${hexA(en.color,0.16)}">
       <div class="db-title">${esc(en.title)}</div><div class="db-time">${timeLbl}</div>
     </div>`;
   }).join('');
