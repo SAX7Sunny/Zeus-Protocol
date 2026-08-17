@@ -190,20 +190,23 @@
 
   /* Week view */
   .cal-view-switch { display:flex; gap:8px; margin:0 6px 14px; }
-  .week-head { display:flex; align-items:center; justify-content:space-between; padding:4px 6px 14px; }
-  .week-list { display:flex; flex-direction:column; }
-  .week-day { display:flex; gap:12px; padding:10px 6px; border-bottom:1px solid var(--line); cursor:pointer; }
-  .week-day-head { flex-shrink:0; width:32px; display:flex; flex-direction:column; align-items:center; gap:3px; }
-  .week-dow { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); font-weight:700; }
-  .week-daynum { font-size:15px; font-weight:700; width:28px; height:28px; border-radius:50%; display:grid; place-items:center; }
-  .week-day.today .week-daynum { background:var(--frost); color:var(--bg); }
-  .week-items { flex:1; min-width:0; display:flex; flex-direction:column; gap:5px; padding-top:2px; }
-  .week-item { display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink); }
-  .week-item.dim { opacity:.4; }
-  .week-time { flex-shrink:0; width:42px; color:var(--muted); font-weight:600; font-size:11.5px; }
-  .week-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .week-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
-  .week-empty { font-size:12px; color:var(--faint); font-style:italic; padding-top:2px; }
+  .wgrid-head { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; padding:0 2px 6px;
+    position:sticky; top:0; background:var(--bg); z-index:5; }
+  .wgrid-head div { text-align:center; font-size:11px; font-weight:700; color:var(--faint);
+    text-transform:uppercase; letter-spacing:.05em; }
+  .weekrow { margin-bottom:16px; }
+  .wk-label { font-family:Georgia,serif; font-size:13px; color:var(--muted); padding:0 6px 6px; }
+  .wgrid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; padding:0 2px; }
+  .wk-cell { min-height:92px; border-radius:10px; background:none; border:none; padding:6px 3px 4px;
+    display:flex; flex-direction:column; align-items:stretch; color:var(--ink); text-align:left; }
+  .wk-daynum { align-self:center; font-size:13px; font-weight:700; width:22px; height:22px;
+    border-radius:50%; display:grid; place-items:center; margin-bottom:4px; }
+  .wk-cell.today .wk-daynum { background:var(--frost); color:var(--bg); }
+  .wk-cell.sel .wk-daynum { box-shadow:inset 0 0 0 2px var(--frost); }
+  .wk-evs { display:flex; flex-direction:column; gap:2px; overflow:hidden; }
+  .wk-ev { font-size:9.5px; line-height:1.35; padding:2px 4px; border-radius:4px; border-left:2px solid;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .wk-more { font-size:9px; color:var(--faint); padding:0 4px; }
 
   /* Agenda */
   .ag-time { flex-shrink:0; width:50px; font-size:13px; font-weight:700; color:var(--frost); line-height:1.3; }
@@ -1576,62 +1579,88 @@ function weekStart(d){
   dt.setDate(dt.getDate()-((dt.getDay()+6)%7));
   return dt;
 }
-let weekViewStart=null;
 
 function weekRangeLabel(start){
-  const end=new Date(start); end.setDate(start.getDate()+13);
+  const end=new Date(start); end.setDate(start.getDate()+6);
+  const sameMonthYear=start.getMonth()===end.getMonth()&&start.getFullYear()===end.getFullYear();
+  if(sameMonthYear) return start.getDate()+' – '+end.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
   const sameYear=start.getFullYear()===end.getFullYear();
   const f=(d,withYear)=>d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:withYear?'numeric':undefined});
   return f(start,!sameYear)+' – '+f(end,true);
 }
 
-function weekStep(n){
-  const base=weekViewStart?new Date(weekViewStart):weekStart(new Date());
-  base.setDate(base.getDate()+n);
-  weekViewStart=base;
-  render();
+// Only real calendar events (imported/subscribed) preview here, on purpose —
+// routines and supplements already crowd the Agenda tab, and a full week of
+// them stacked into these narrow grid cells would be unreadable.
+let weeksBack=0, weeksFwd=8, weekScrollHooked=false;
+
+function weekBlock(offset){
+  const anchor=weekStart(new Date());
+  const start=new Date(anchor); start.setDate(anchor.getDate()+offset*7);
+  const today=new Date(); today.setHours(0,0,0,0);
+
+  let cells='';
+  for(let i=0;i<7;i++){
+    const d=new Date(start); d.setDate(start.getDate()+i);
+    const evs=eventsOn(d);
+    const cls=['wk-cell'];
+    if(sameDay(d,today)) cls.push('today');
+    if(sameDay(d,viewDate)) cls.push('sel');
+    const shown=evs.slice(0,2);
+    const previews=shown.map(e=>{
+      const c2=eventColor(e);
+      return `<div class="wk-ev" style="background:${hexA(c2,0.16)};border-left-color:${c2}">${esc(e.title)}</div>`;
+    }).join('');
+    const more=evs.length>shown.length?`<div class="wk-more">+${evs.length-shown.length} more</div>`:'';
+    cells+=`<button class="${cls.join(' ')}" data-day="${key(d)}">
+      <span class="wk-daynum">${d.getDate()}</span>
+      <div class="wk-evs">${previews}${more}</div>
+    </button>`;
+  }
+  return `<div class="weekrow" id="w${offset}">
+    <div class="wk-label">${esc(weekRangeLabel(start))}</div>
+    <div class="wgrid">${cells}</div>
+  </div>`;
 }
 
-function weekItemHTML(a,d){
-  if(a.kind==='routine'){
-    const r=a.ref, dim=r.optional&&!isOptActive(r,d);
-    return `<div class="week-item${dim?' dim':''}"><span class="week-time">${r.time}</span><span class="week-title">${esc(r.title)}</span></div>`;
-  }
-  if(a.kind==='supp'){
-    const b=a.ref;
-    return `<div class="week-item"><span class="week-time">${b.time}</span><span class="week-title">Supplements · ${esc(b.title)}</span></div>`;
-  }
-  const e=a.ref, color=eventColor(e);
-  return `<div class="week-item"><span class="week-dot" style="background:${color}"></span><span class="week-time">${a.allDay?'All day':a.t}</span><span class="week-title">${esc(e.title)}</span></div>`;
+function loadEarlierWeeks(){
+  const w=document.getElementById('weekWrap'); if(!w) return;
+  const before=document.body.scrollHeight;
+  let add=''; for(let i=weeksBack+4;i>=weeksBack+1;i--) add+=weekBlock(-i);
+  w.insertAdjacentHTML('afterbegin',add);
+  weeksBack+=4;
+  bindDayCells(w);
+  const after=document.body.scrollHeight;
+  window.scrollBy(0, after-before);
 }
 
 function renderWeekView(c){
-  const start=weekViewStart?new Date(weekViewStart):weekStart(new Date());
-  start.setHours(0,0,0,0);
-  const today=new Date(); today.setHours(0,0,0,0);
+  c.insertAdjacentHTML('beforeend','<button class="earlier-btn" onclick="loadEarlierWeeks()">‹ Earlier weeks</button>');
+  c.insertAdjacentHTML('beforeend',
+    '<div class="wgrid-head"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div>');
 
-  c.insertAdjacentHTML('beforeend',`
-    <div class="week-head">
-      <button class="day-back" onclick="weekStep(-14)">‹</button>
-      <div class="day-title">${esc(weekRangeLabel(start))}</div>
-      <button class="day-back" onclick="weekStep(14)">›</button>
-    </div>`);
-
-  const wrap=document.createElement('div'); wrap.className='week-list';
-  for(let i=0;i<14;i++){
-    const d=new Date(start); d.setDate(start.getDate()+i);
-    const items=agendaOn(d);
-    const isToday=sameDay(d,today);
-    const itemsHTML=items.length?items.map(a=>weekItemHTML(a,d)).join(''):'<div class="week-empty">Nothing scheduled</div>';
-    wrap.insertAdjacentHTML('beforeend',
-      `<div class="week-day${isToday?' today':''}" data-day="${key(d)}">
-        <div class="week-day-head"><span class="week-dow">${d.toLocaleDateString('en-GB',{weekday:'short'})}</span>
-          <span class="week-daynum">${d.getDate()}</span></div>
-        <div class="week-items">${itemsHTML}</div>
-      </div>`);
-  }
+  const wrap=document.createElement('div'); wrap.id='weekWrap';
+  let html=''; for(let i=-weeksBack;i<=weeksFwd;i++) html+=weekBlock(i);
+  wrap.innerHTML=html;
   c.appendChild(wrap);
+  c.insertAdjacentHTML('beforeend','<div class="month-hint">Keep scrolling for more weeks</div>');
+
   bindDayCells(wrap);
+
+  if(!weekScrollHooked){
+    weekScrollHooked=true;
+    window.addEventListener('scroll',()=>{
+      if(activeTab!=='cal'||calMode!=='week') return;
+      if(window.innerHeight+window.scrollY > document.body.offsetHeight-600){
+        const w=document.getElementById('weekWrap'); if(!w) return;
+        if(w.dataset.busy) return; w.dataset.busy='1';
+        let add=''; for(let i=weeksFwd+1;i<=weeksFwd+4;i++) add+=weekBlock(i);
+        weeksFwd+=4; w.insertAdjacentHTML('beforeend',add);
+        bindDayCells(w);
+        delete w.dataset.busy;
+      }
+    },{passive:true});
+  }
 }
 
 function renderCalendar(c){
