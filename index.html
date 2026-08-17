@@ -249,6 +249,7 @@
     color:var(--amber); background:rgba(212,189,110,.15); border:none;
     padding:3px 8px; border-radius:6px; }
   .opt-pill.off { color:var(--muted); background:rgba(236,231,214,.08); }
+  .backup-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
 
 
   .biocard { margin:10px 6px 12px; padding:15px 16px; border-radius:14px;
@@ -384,6 +385,7 @@
 <main id="content"></main>
 <input type="file" id="fileInput" accept=".ics,text/calendar">
 <input type="file" id="pdfInput" accept="application/pdf,.pdf" style="display:none">
+<input type="file" id="backupInput" accept=".json" style="display:none">
 
 <button class="fab" onclick="openSheet('add')" aria-label="Add">+</button>
 <div class="footer-bar" id="footer"></div>
@@ -589,18 +591,22 @@ let importInfo='';
    Saves to this device's browser storage. Sandboxed previews block it,
    so every call degrades quietly to in-memory instead of throwing. */
 const DB_KEY='zeus.protocol.v2';
+const APP_VERSION='1.0';
 let canPersist=true, lastSaveOk=null;
 
+function backupData(){
+  return {
+    v:2, ROUTINES, SUPP_BLOCKS, state, suppState, optOn, PANELS, seenDefaults,
+    IMPORTED: IMPORTED.map(e=>({...e,start:e.start.toISOString()})),
+    SUBS: SUBS.map(s=>({id:s.id,url:s.url,name:s.name,color:s.color,status:s.status,msg:s.msg,
+      last:s.last?new Date(s.last).toISOString():null})),
+    SUB_PROXY, SUB_MINUTES
+  };
+}
 function saveAll(){
   if(!canPersist) return;
   try{
-    localStorage.setItem(DB_KEY, JSON.stringify({
-      v:2, ROUTINES, SUPP_BLOCKS, state, suppState, optOn, PANELS, seenDefaults,
-      IMPORTED: IMPORTED.map(e=>({...e,start:e.start.toISOString()})),
-      SUBS: SUBS.map(s=>({id:s.id,url:s.url,name:s.name,color:s.color,status:s.status,msg:s.msg,
-        last:s.last?new Date(s.last).toISOString():null})),
-      SUB_PROXY, SUB_MINUTES
-    }));
+    localStorage.setItem(DB_KEY, JSON.stringify(backupData()));
     lastSaveOk=true;
   }catch(e){ canPersist=false; lastSaveOk=false; }
 }
@@ -617,27 +623,30 @@ function migratePanel(p){
   return {id:p.id, date:p.date, name:p.name, label:'', values};
 }
 
+function applyBackup(d){
+  if(Array.isArray(d.ROUTINES)&&d.ROUTINES.length) ROUTINES=d.ROUTINES;
+  if(Array.isArray(d.SUPP_BLOCKS)&&d.SUPP_BLOCKS.length) SUPP_BLOCKS=d.SUPP_BLOCKS;
+  seenDefaults=Array.isArray(d.seenDefaults)?d.seenDefaults:[];
+  mergeNewDefaults();
+  state=d.state||{}; suppState=d.suppState||{}; optOn=d.optOn||{};
+  IMPORTED=(d.IMPORTED||[]).map(e=>({...e,start:new Date(e.start)}));
+  PANELS=(d.PANELS||[]).map(migratePanel);
+  if(Array.isArray(d.SUBS)){
+    SUBS=d.SUBS.map(s=>({...s,last:s.last?new Date(s.last):null,events:[]}));
+  }else if(d.SUB_URL){
+    SUBS=[{id:'s'+Date.now(),url:d.SUB_URL,name:hostnameOf(d.SUB_URL),color:CAL_COLORS[0],
+      status:'idle',msg:'',last:null,events:[]}];
+  }else{
+    SUBS=[];
+  }
+  SUB_PROXY=d.SUB_PROXY||''; SUB_MINUTES=d.SUB_MINUTES||15;
+}
+
 function loadAll(){
   try{
     const raw=localStorage.getItem(DB_KEY);
     if(!raw){ mergeNewDefaults(); lastSaveOk=true; return; }
-    const d=JSON.parse(raw);
-    if(Array.isArray(d.ROUTINES)&&d.ROUTINES.length) ROUTINES=d.ROUTINES;
-    if(Array.isArray(d.SUPP_BLOCKS)&&d.SUPP_BLOCKS.length) SUPP_BLOCKS=d.SUPP_BLOCKS;
-    seenDefaults=Array.isArray(d.seenDefaults)?d.seenDefaults:[];
-    mergeNewDefaults();
-    state=d.state||{}; suppState=d.suppState||{}; optOn=d.optOn||{};
-    IMPORTED=(d.IMPORTED||[]).map(e=>({...e,start:new Date(e.start)}));
-    PANELS=(d.PANELS||[]).map(migratePanel);
-    if(Array.isArray(d.SUBS)){
-      SUBS=d.SUBS.map(s=>({...s,last:s.last?new Date(s.last):null,events:[]}));
-    }else if(d.SUB_URL){
-      SUBS=[{id:'s'+Date.now(),url:d.SUB_URL,name:hostnameOf(d.SUB_URL),color:CAL_COLORS[0],
-        status:'idle',msg:'',last:null,events:[]}];
-    }else{
-      SUBS=[];
-    }
-    SUB_PROXY=d.SUB_PROXY||''; SUB_MINUTES=d.SUB_MINUTES||15;
+    applyBackup(JSON.parse(raw));
     lastSaveOk=true;
   }catch(e){ canPersist=false; lastSaveOk=false; }
 }
@@ -677,6 +686,40 @@ function wipeAll(){
   try{ localStorage.removeItem(DB_KEY); }catch(e){}
   location.reload();
 }
+
+function exportBackup(){
+  const data={...backupData(), exportedAt:new Date().toISOString(), appVersion:APP_VERSION};
+  download(JSON.stringify(data,null,2), 'zeus-backup-'+key(new Date())+'.json', 'application/json;charset=utf-8');
+}
+
+document.getElementById('backupInput').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    e.target.value='';
+    let data;
+    try{ data=JSON.parse(rd.result); }
+    catch(err){ alert('That file is not valid JSON.'); return; }
+    if(!data || typeof data!=='object' || !Array.isArray(data.ROUTINES) || !Array.isArray(data.SUPP_BLOCKS)){
+      alert('That file does not look like a Zeus Protocol backup — it is missing routines or supplements.');
+      return;
+    }
+    const when=data.exportedAt?new Date(data.exportedAt).toLocaleString():'unknown date';
+    const counts=[
+      data.ROUTINES.length+' routine'+(data.ROUTINES.length===1?'':'s'),
+      data.SUPP_BLOCKS.length+' supplement block'+(data.SUPP_BLOCKS.length===1?'':'s')
+    ];
+    if(Array.isArray(data.PANELS)) counts.push(data.PANELS.length+' blood panel'+(data.PANELS.length===1?'':'s'));
+    if(Array.isArray(data.SUBS)) counts.push(data.SUBS.length+' calendar subscription'+(data.SUBS.length===1?'':'s'));
+    if(!confirm('Replace all current data with this backup?\n\nExported: '+when+'\n'+counts.join(', ')+'\n\nThis cannot be undone.')) return;
+    applyBackup(data);
+    saveAll();
+    render();
+    if(SUBS.length){ startSubTimer(); subFetchAll(true); }
+  };
+  rd.onerror=()=>alert('Could not read that file.');
+  rd.readAsText(f);
+});
 
 /* ======================================================================
    BIO ANALYSIS  (beta)
@@ -1497,7 +1540,11 @@ function renderCalendar(c){
       ${canPersist
         ? '<strong>Saved on this device.</strong> Your routines, supplements and daily ticks survive a reload.'
         : '<strong>Not being saved.</strong> This preview blocks browser storage — download the file and open it locally to keep changes.'}
-      ${canPersist?'<br><button class="opt-pill off" style="margin-top:8px" onclick="wipeAll()">Erase all saved data</button>':''}
+      ${canPersist?`<br><div class="backup-row">
+        <button class="opt-pill" onclick="exportBackup()">Export backup</button>
+        <button class="opt-pill" onclick="document.getElementById('backupInput').click()">Import backup</button>
+        <button class="opt-pill off" onclick="wipeAll()">Erase all saved data</button>
+      </div>`:''}
     </div>`);
   c.insertAdjacentHTML('beforeend',
     `<div class="compact-import">
@@ -1890,8 +1937,8 @@ function vevent(uid,title,time,durMin,note,onDay){
 }
 const wrapCal=e=>['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Routine//EN','CALSCALE:GREGORIAN',
   'METHOD:PUBLISH',...e,'END:VCALENDAR'].join('\r\n');
-function download(ics,name){
-  const b=new Blob([ics],{type:'text/calendar;charset=utf-8'});
+function download(content,name,mime){
+  const b=new Blob([content],{type:mime||'text/calendar;charset=utf-8'});
   const u=URL.createObjectURL(b), a=document.createElement('a');
   a.href=u; a.download=name; document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(u),1000);
