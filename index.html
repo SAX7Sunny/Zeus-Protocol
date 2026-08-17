@@ -1038,6 +1038,14 @@ function parseICSDate(v){
   if(z) return {date:new Date(Date.UTC(+y,+mo-1,+d,+h,+mi,+s)),allDay:false};
   return {date:new Date(+y,+mo-1,+d,+h,+mi,+s),allDay:false};
 }
+// A simple deterministic string hash, used as a fallback id when a VEVENT
+// has no UID. Must be stable across re-parses (subscriptions re-fetch on a
+// timer) so per-event "done" marks and colours don't reset.
+function stableHash(s){
+  let h=0;
+  for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))|0;
+  return 'h'+(h>>>0).toString(36);
+}
 function parseICS(text){
   const lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\n[ \t]/g,'').split('\n');
   const out=[]; let cur=null;
@@ -1047,8 +1055,9 @@ function parseICS(text){
     if(line==='END:VEVENT'){
       if(cur&&cur.start){
         const dur=cur.end?Math.max(1,Math.round((cur.end-cur.start)/60000)):(cur.allDay?1440:60);
-        out.push({id:'i'+out.length+'-'+Date.now(),title:cur.title||'(no title)',
-          start:cur.start,dur,allDay:!!cur.allDay,rrule:cur.rrule||null,src:'ics'});
+        const title=cur.title||'(no title)';
+        const id=cur.uid ? 'u'+cur.uid : stableHash(title+'|'+cur.start.getTime());
+        out.push({id,title,start:cur.start,dur,allDay:!!cur.allDay,rrule:cur.rrule||null,src:'ics'});
       }
       cur=null; continue;
     }
@@ -1057,6 +1066,7 @@ function parseICS(text){
     const left=line.slice(0,ci), val=line.slice(ci+1);
     const name=left.split(';')[0].toUpperCase();
     if(name==='SUMMARY') cur.title=unescapeICS(val);
+    else if(name==='UID') cur.uid=val.trim();
     else if(name==='DTSTART'){ const p=parseICSDate(val); if(p){ cur.start=p.date; cur.allDay=p.allDay; } }
     else if(name==='DTEND'){ const p=parseICSDate(val); if(p) cur.end=p.date; }
     else if(name==='RRULE'){
@@ -1284,12 +1294,13 @@ function renderAgenda(c){
           <div class="ag-sub">${esc(b.items.map(i=>i.name).join(', '))}</div></div>
         <div class="acts"><button class="ico edit" data-goblk="1">✎</button></div>`;
     } else {
-      const e=a.ref;
-      row.className='row';
+      const e=a.ref, done=!!mr['ev:'+e.id];
+      row.className='row'+(done?' done':'');
       const sub=e.src==='sub'?SUBS.find(s=>s.id===e.subId):null;
       const dot=sub?`<span class="tag-dot" style="background:${sub.color}"></span>`:'';
       const label=sub?esc(sub.name):(e.src==='sub'?'Calendar':'Imported');
       row.innerHTML=`<span class="ag-time">${a.allDay?'all<small>day</small>':a.t+'<small>'+e.dur+' min</small>'}</span>
+        <div class="check ${done?'on':''}" data-id="ev:${e.id}"></div>
         <div class="rbody"><div class="rtitle">${esc(e.title)}</div>
           <div class="rmeta"><span class="tag ${e.src==='sub'?'google':'imported'}">${dot}${label}</span></div></div>
         ${e.src==='sub'?'':`<div class="acts"><button class="ico del" data-edel="${e.id}">✕</button></div>`}`;
