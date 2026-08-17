@@ -164,6 +164,31 @@
     border-radius:20px; border:1px solid var(--line); background:var(--surface); color:var(--muted);
     white-space:nowrap; font-weight:500; }
 
+  /* Day view */
+  .day-head { display:flex; align-items:center; gap:10px; padding:4px 6px 18px; }
+  .day-back { background:var(--surface); border:1px solid var(--line); color:var(--ink);
+    border-radius:10px; padding:8px 12px; font-size:13px; font-weight:600; flex-shrink:0; }
+  .day-title { flex:1; font-family:Georgia,serif; font-size:15px; font-weight:600; text-align:center; }
+  .day-arrows { display:flex; gap:6px; flex-shrink:0; }
+  .day-arrows button { width:34px; height:34px; border-radius:9px; border:1px solid var(--line);
+    background:var(--surface); color:var(--ink); font-size:16px; }
+  .day-allday-strip { display:flex; flex-direction:column; gap:6px; margin:0 6px 16px; }
+  .day-allday { padding:8px 10px; border-radius:8px; border-left:3px solid; font-size:12.5px;
+    font-weight:600; color:var(--ink); }
+  .day-timeline { position:relative; margin:0 6px 30px; }
+  .day-hour { position:absolute; left:0; width:48px; font-size:11px; color:var(--faint); transform:translateY(-6px); }
+  .day-hourline { position:absolute; left:52px; right:0; height:1px; background:var(--line); }
+  .day-events { position:absolute; left:56px; right:0; top:0; bottom:0; }
+  .day-block { position:absolute; border-radius:8px; padding:4px 8px; overflow:hidden;
+    border-left:3px solid; box-sizing:border-box; }
+  .day-block.dim { opacity:.4; }
+  .db-title { font-size:12px; font-weight:600; color:var(--ink); white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+  .db-time { font-size:10.5px; color:var(--muted); margin-top:1px; }
+  .now-line-day { position:absolute; left:52px; right:0; height:1.5px; background:var(--rose); z-index:2; }
+  .now-line-day::before { content:''; position:absolute; left:-4px; top:-3.25px; width:8px; height:8px;
+    border-radius:50%; background:var(--rose); }
+
   /* Agenda */
   .ag-time { flex-shrink:0; width:50px; font-size:13px; font-weight:700; color:var(--frost); line-height:1.3; }
   .ag-time small { display:block; font-size:10.5px; color:var(--faint); font-weight:600; }
@@ -424,6 +449,7 @@ const DOW_LABEL={0:'S',1:'M',2:'T',3:'W',4:'T',5:'F',6:'S'};
 // Key stays 'planning' so existing saved routines keep working; only the label changed.
 const CATS={all:'All',health:'Health',sport:'Sport',mental:'Mental',planning:'Others'};
 const LABEL={...CATS, event:'Event'};   // events are not a filterable category
+const CAT_COLOR={health:'#6fc4d8',sport:'#e89b6c',mental:'#8fce8a',planning:'#d4bd6e',event:'#6fc4d8'};
 
 const DEFAULT_ROUTINES=[
  {id:'morning-walk',title:'Morning walk',time:'06:45',dur:15,cat:'health'},
@@ -743,6 +769,7 @@ async function handlePdf(file){
 }
 
 let activeTab='agenda', activeFilter='all', editing=null, mode='repeat', selDows=[0,1,2,3,4,5,6];
+let calMode='month';
 let viewDate=new Date(); viewDate.setHours(0,0,0,0);
 let state={}, suppState={}, optOn={};   // optOn[dateKey][routineId] = active for that day
 
@@ -807,6 +834,10 @@ const streakPill=r=>{
 function toggleOpt(id){ const m=optMarks(); m[id]=!m[id]; if(!m[id]) delete marks(state)[id]; render(); }
 const hhmm=d=>pad(d.getHours())+':'+pad(d.getMinutes());
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function hexA(hex,a){
+  const h=hex.replace('#',''), r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
 
 function routinesOn(d){
   const dow=d.getDay(), k=key(d);
@@ -1212,7 +1243,9 @@ function bindDayCells(root){
     b.onclick=()=>{
       const [y,m,d]=b.dataset.day.split('-').map(Number);
       viewDate=new Date(y,m-1,d); viewDate.setHours(0,0,0,0);
-      setTab('agenda');
+      calMode='day';
+      render();
+      scrollDayView();
     };
   });
 }
@@ -1228,7 +1261,113 @@ function loadEarlier(){
   window.scrollBy(0, after-before);
 }
 
+const HOUR_PX=52;
+
+function layoutDay(entries){
+  const sorted=[...entries].sort((a,b)=>a.start-b.start||a.end-b.end);
+  let cluster=null;
+  sorted.forEach(e=>{
+    if(cluster && e.start<cluster.maxEnd){ cluster.items.push(e); cluster.maxEnd=Math.max(cluster.maxEnd,e.end); }
+    else { cluster={items:[e],maxEnd:e.end}; }
+    e.cluster=cluster;
+  });
+  const seen=new Set();
+  sorted.forEach(e=>{
+    const cl=e.cluster; if(seen.has(cl)) return; seen.add(cl);
+    const cols=[];
+    cl.items.forEach(it=>{
+      let ci=cols.findIndex(end=>end<=it.start);
+      if(ci===-1){ ci=cols.length; cols.push(it.end); } else cols[ci]=it.end;
+      it.col=ci;
+    });
+    cl.items.forEach(it=>{ it.colCount=cols.length; });
+  });
+}
+
+function scrollDayView(){
+  setTimeout(()=>{
+    const wrap=document.getElementById('dayTimeline'); if(!wrap) return;
+    const now=new Date();
+    const mins=sameDay(viewDate,now)?(now.getHours()*60+now.getMinutes()):7*60;
+    const hh=document.querySelector('header').offsetHeight;
+    const top=wrap.offsetTop+mins/60*HOUR_PX-hh-40;
+    window.scrollTo({top:Math.max(0,top),behavior:'instant'});
+  },0);
+}
+
+function updateNowLine(){
+  const el=document.getElementById('nowLine'); if(!el) return;
+  if(!sameDay(viewDate,new Date())){ el.remove(); return; }
+  const now=new Date();
+  el.style.top=((now.getHours()*60+now.getMinutes())/60*HOUR_PX)+'px';
+}
+
+function renderDayView(c){
+  const items=agendaOn(viewDate);
+  const allDayItems=items.filter(a=>a.kind==='event'&&a.allDay);
+  const timedItems=items.filter(a=>!(a.kind==='event'&&a.allDay));
+  const isToday=sameDay(viewDate,new Date());
+
+  c.insertAdjacentHTML('beforeend',`
+    <div class="day-head">
+      <button class="day-back" onclick="calMode='month';render()">‹ Back</button>
+      <div class="day-title">${esc(viewDate.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'}))}</div>
+      <div class="day-arrows"><button onclick="shiftDay(-1)">‹</button><button onclick="shiftDay(1)">›</button></div>
+    </div>`);
+
+  if(allDayItems.length){
+    const rows=allDayItems.map(a=>{
+      const e=a.ref, sub=e.src==='sub'?SUBS.find(s=>s.id===e.subId):null, color=sub?sub.color:'#6fc4d8';
+      return `<div class="day-allday" style="border-left-color:${color};background:${hexA(color,0.16)}">${esc(e.title)}</div>`;
+    }).join('');
+    c.insertAdjacentHTML('beforeend',`<div class="day-allday-strip">${rows}</div>`);
+  }
+
+  const entries=timedItems.map(a=>{
+    let start,dur,title,color,dim=false,tap='';
+    if(a.kind==='routine'){
+      const r=a.ref, [h,m]=r.time.split(':').map(Number);
+      start=h*60+m; dur=r.dur; title=r.title; color=CAT_COLOR[r.cat]||'#6fc4d8';
+      dim=r.optional&&!isOptActive(r,viewDate);
+      tap=`onclick="openSheet('edit','${r.id}')"`;
+    } else if(a.kind==='supp'){
+      const b=a.ref, [h,m]=b.time.split(':').map(Number);
+      start=h*60+m; dur=10; title='Supplements · '+b.title; color='#6fc4d8';
+      tap=`onclick="setTab('supps')"`;
+    } else {
+      const e=a.ref, sub=e.src==='sub'?SUBS.find(s=>s.id===e.subId):null;
+      start=e.start.getHours()*60+e.start.getMinutes(); dur=e.dur; title=e.title;
+      color=sub?sub.color:'#6fc4d8';
+    }
+    return {start,end:start+Math.max(dur,1),dur,title,color,dim,tap};
+  });
+  layoutDay(entries);
+
+  const blocksHTML=entries.map(en=>{
+    const top=en.start/60*HOUR_PX, height=Math.max(26,en.dur/60*HOUR_PX);
+    const widthPct=100/en.colCount, leftPct=widthPct*en.col;
+    const endMin=en.start+en.dur;
+    const timeLbl=`${pad(Math.floor(en.start/60)%24)}:${pad(en.start%60)}–${pad(Math.floor(endMin/60)%24)}:${pad(endMin%60)}`;
+    return `<div class="day-block${en.dim?' dim':''}" style="top:${top}px;height:${height}px;
+      left:calc(${leftPct}% + 2px);width:calc(${widthPct}% - 4px);
+      border-left-color:${en.color};background:${hexA(en.color,0.16)};cursor:${en.tap?'pointer':'default'}" ${en.tap}>
+      <div class="db-title">${esc(en.title)}</div><div class="db-time">${timeLbl}</div>
+    </div>`;
+  }).join('');
+
+  const hourLabels=Array.from({length:24},(_,h)=>`<div class="day-hour" style="top:${h*HOUR_PX}px">${pad(h)}:00</div>`).join('');
+  const hourLines=Array.from({length:24},(_,h)=>`<div class="day-hourline" style="top:${h*HOUR_PX}px"></div>`).join('');
+  const nowLine=isToday?`<div class="now-line-day" id="nowLine" style="top:${(new Date().getHours()*60+new Date().getMinutes())/60*HOUR_PX}px"></div>`:'';
+
+  c.insertAdjacentHTML('beforeend',`
+    <div class="day-timeline" id="dayTimeline" style="height:${24*HOUR_PX}px">
+      ${hourLabels}${hourLines}${nowLine}
+      <div class="day-events">${blocksHTML}</div>
+    </div>`);
+}
+
 function renderCalendar(c){
+  if(calMode==='day'){ renderDayView(c); return; }
   c.insertAdjacentHTML('beforeend', subCardHTML());
   c.insertAdjacentHTML('beforeend',
     `<div class="note${canPersist?'':' warn'}" style="margin:0 6px 4px">
@@ -1583,7 +1722,7 @@ function exportEverything(){
 
 loadAll();
 render();
-setInterval(renderEatWindow,60000);
+setInterval(()=>{ renderEatWindow(); updateNowLine(); },60000);
 if(SUBS.length){ startSubTimer(); subFetchAll(true); }
 </script>
 </body>
