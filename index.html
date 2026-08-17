@@ -281,6 +281,11 @@
   .panel-row { display:flex; align-items:center; gap:10px; padding:11px 6px; border-bottom:1px solid var(--line); }
   .panel-date { flex:1; font-size:13.5px; font-weight:600; }
   .panel-meta { font-size:11.5px; color:var(--faint); margin-top:2px; }
+  .compare-row { display:flex; align-items:center; gap:8px; margin:0 6px 14px; flex-wrap:wrap; }
+  .compare-sel { flex:1; min-width:110px; padding:10px 12px; background:var(--bg); border:1px solid var(--line);
+    border-radius:10px; color:var(--ink); font-size:13px; font-family:inherit; }
+  .compare-vs { font-size:12px; color:var(--muted); font-weight:600; flex-shrink:0; }
+  .compare-reset { width:auto; margin-top:0; padding:10px 14px; font-size:12.5px; flex-shrink:0; }
 
 
   .streak-pill { font-size:10.5px; font-weight:800; letter-spacing:.04em;
@@ -680,6 +685,7 @@ function wipeAll(){
    ====================================================================== */
 let PANELS=[];          // {id,date,name,label,values:[{key,section,label,displayName,v,text,qual,unit,refLo,refHi}]}
 let bioNote='', bioBusy=false, bioMsg='';
+let bioCurId=null, bioPrevId=null;   // null = default to the latest two panels
 
 // German + English labels, since Austrian labs report in German.
 const MARKERS=[
@@ -739,10 +745,21 @@ async function pdfToLines(file){
     const rows={};
     tc.items.forEach(it=>{
       const y=Math.round(it.transform[5]);
-      (rows[y]=rows[y]||[]).push({x:it.transform[4],s:it.str});
+      (rows[y]=rows[y]||[]).push({x:it.transform[4],s:it.str,w:it.width||0,h:Math.abs(it.transform[3])||it.height||10});
     });
     Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
-      const line=rows[y].sort((a,b)=>a.x-b.x).map(o=>o.s).join(' ').replace(/\s+/g,' ').trim();
+      // Some PDF generators split a single word ("Hämoglobin") into several
+      // text items, one per glyph run. Joining every item with a space
+      // turns names into "H ä m o g l o b i n" — instead, only insert a
+      // space where there's an actual horizontal gap (a real word boundary).
+      const items=rows[y].sort((a,b)=>a.x-b.x);
+      let line='', end=null;
+      items.forEach(it=>{
+        if(end!==null && it.x-end>it.h*0.2) line+=' ';
+        line+=it.s;
+        end=it.x+it.w;
+      });
+      line=line.replace(/\s+/g,' ').trim();
       if(line) lines.push(line);
     });
   }
@@ -1556,9 +1573,25 @@ function renderBio(c){
     return;
   }
 
-  const cur=PANELS[PANELS.length-1], prev=PANELS.length>1?PANELS[PANELS.length-2]:null;
-  c.insertAdjacentHTML('beforeend',
-    `<div class="day-sep">Latest panel · ${esc(cur.date)}${prev?' &nbsp;vs&nbsp; '+esc(prev.date):' · no earlier panel to compare'}</div>`);
+  const hasHistory=PANELS.length>1;
+  const cur=(bioCurId&&PANELS.find(p=>p.id===bioCurId))||PANELS[PANELS.length-1];
+  const prev=hasHistory?((bioPrevId&&PANELS.find(p=>p.id===bioPrevId))||PANELS[PANELS.length-2]):null;
+
+  if(hasHistory){
+    const opts=selId=>PANELS.slice().reverse().map(p=>
+      `<option value="${p.id}"${p.id===selId?' selected':''}>${esc(p.label||p.date)}</option>`).join('');
+    c.insertAdjacentHTML('beforeend',
+      `<div class="day-sep">Compare panels</div>
+      <div class="compare-row">
+        <select class="compare-sel" onchange="setBioCompare('cur',this.value)">${opts(cur.id)}</select>
+        <span class="compare-vs">vs</span>
+        <select class="compare-sel" onchange="setBioCompare('prev',this.value)">${opts(prev.id)}</select>
+        ${(bioCurId||bioPrevId)?'<button class="link-btn compare-reset" onclick="resetBioCompare()">Latest two</button>':''}
+      </div>`);
+  } else {
+    c.insertAdjacentHTML('beforeend',
+      `<div class="day-sep">Latest panel · ${esc(cur.date)} · no earlier panel to compare</div>`);
+  }
 
   let lastSection=null;
   cur.values.forEach(v=>{
@@ -1749,6 +1782,12 @@ function openSheet(kind,ref){
   document.getElementById('overlay').classList.add('open');
 }
 function closeSheet(){ document.getElementById('overlay').classList.remove('open'); editing=null; }
+
+function setBioCompare(which,id){
+  if(which==='cur') bioCurId=id; else bioPrevId=id;
+  render();
+}
+function resetBioCompare(){ bioCurId=null; bioPrevId=null; render(); }
 
 function openPanelSheet(id){
   const p=PANELS.find(x=>x.id===id); if(!p) return;
