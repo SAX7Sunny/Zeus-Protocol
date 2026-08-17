@@ -77,7 +77,8 @@
     background:var(--surface); color:var(--ink); white-space:nowrap; font-weight:500; }
   .chip.active { background:var(--ink); color:var(--bg); border-color:var(--ink); }
 
-  main { padding:4px 14px 100px; }
+  main { padding:4px 14px 96px; }   /* bottom clears the floating + button */
+  .tab-actions { display:flex; gap:8px; flex-wrap:wrap; padding:2px 6px 12px; }
 
   .row { display:flex; align-items:center; gap:11px; padding:14px 6px; border-bottom:1px solid var(--line); }
   .check { flex-shrink:0; width:26px; height:26px; border-radius:50%;
@@ -128,9 +129,6 @@
   .day-sep { font-family:Georgia,serif; font-size:13px; color:var(--muted);
     padding:16px 6px 6px; letter-spacing:.04em; text-transform:uppercase; }
 
-  .footer-bar { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:640px;
-    padding:12px 14px calc(12px + env(safe-area-inset-bottom));
-    background:linear-gradient(to top,var(--bg) 72%,rgba(20,32,29,0)); display:flex; gap:9px; }
   .btn-primary,.btn-ghost { flex:1; padding:14px 8px; border-radius:12px; font-size:14.5px; font-weight:600; border:none; }
   .btn-primary { background:var(--ink); color:var(--bg); }
   .btn-ghost { background:var(--surface); border:1px solid var(--line); color:var(--ink); }
@@ -332,7 +330,7 @@
   .eat-fasting .eat-label, .eat-fasting .eat-left { color:var(--rose); }
   .eat-fasting .eat-fill { background:var(--rose); }
 
-  .fab { position:fixed; right:calc(50% - 320px + 18px); bottom:calc(84px + env(safe-area-inset-bottom));
+  .fab { position:fixed; right:calc(50% - 320px + 18px); bottom:calc(24px + env(safe-area-inset-bottom));
     width:56px; height:56px; border-radius:50%; background:var(--frost); color:var(--bg); border:none;
     font-size:30px; font-weight:300; line-height:1; box-shadow:0 6px 20px rgba(0,0,0,.4); z-index:20; }
   @media (max-width:660px){ .fab{ right:18px; } }
@@ -413,7 +411,6 @@
 <input type="file" id="backupInput" accept=".json" style="display:none">
 
 <button class="fab" onclick="openSheet('add')" aria-label="Add">+</button>
-<div class="footer-bar" id="footer"></div>
 
 <div class="overlay" id="overlay">
   <div class="sheet">
@@ -1238,14 +1235,16 @@ function render(){
   else if(activeTab==='supps') renderSupps(c);
   else if(activeTab==='cal') renderCalendar(c);
   else renderBio(c);
-  renderProgress(); renderEatWindow(); renderFooter(); saveAll();
+  renderProgress(); renderEatWindow(); saveAll();
   syncHeaderHeight();
 }
 
 function renderRoutine(c){
   let items=visibleRoutines();
   if(activeFilter!=='all') items=items.filter(r=>r.cat===activeFilter);
-  if(!items.length){ c.innerHTML='<div class="empty">Nothing scheduled here.<br>Tap + to add something.</div>'; return; }
+  c.insertAdjacentHTML('beforeend',
+    `<div class="tab-actions"><button class="opt-pill off" onclick="resetDay()">Reset day</button></div>`);
+  if(!items.length){ c.insertAdjacentHTML('beforeend','<div class="empty">Nothing scheduled here.<br>Tap + to add something.</div>'); return; }
   const m=marks(state);
   items.forEach(r=>{
     const active=isOptActive(r,viewDate), done=active&&!!m[r.id];
@@ -1278,6 +1277,8 @@ function renderRoutine(c){
 
 function renderSupps(c){
   const m=marks(suppState);
+  c.insertAdjacentHTML('beforeend',
+    `<div class="tab-actions"><button class="opt-pill off" onclick="resetSupps()">Reset day</button></div>`);
   SUPP_BLOCKS.forEach(block=>{
     const wrap=document.createElement('div'); wrap.className='block';
     wrap.innerHTML=`<div class="block-head"><span class="block-title">${esc(block.title)}</span>
@@ -1483,6 +1484,13 @@ function calDataSectionHTML(){
       <button class="opt-pill" onclick="exportBackup()">Export backup</button>
       <button class="opt-pill" onclick="document.getElementById('backupInput').click()">Import backup</button>
       <button class="opt-pill off" onclick="wipeAll()">Erase all saved data</button>
+    </div>
+    <div class="gsub" style="margin:14px 0 6px">Send the selected day to your calendar app as an <b>.ics</b> file.</div>
+    <div class="backup-row" style="margin-top:0">
+      <button class="opt-pill" onclick="exportEverything()">Export day</button>
+      <button class="opt-pill" onclick="exportAllRoutines()">Export routines</button>
+      <button class="opt-pill" onclick="exportSupps()">Export supplements</button>
+      <button class="opt-pill off" onclick="clearImports()">Clear imports</button>
     </div>
     <div class="compact-import" style="margin:14px 0 0">
       <div class="ci-txt">Or import a one-off <strong>.ics</strong> export${importInfo?'<br>'+esc(importInfo):''}</div>
@@ -1907,24 +1915,6 @@ function renderProgress(){
   document.getElementById('pct').textContent=pct+'%';
 }
 
-function renderFooter(){
-  const f=document.getElementById('footer');
-  if(activeTab==='agenda')
-    f.innerHTML=`<button class="btn-ghost" onclick="setTab('cal')">Month view</button>
-      <button class="btn-primary" onclick="exportEverything()">Export day → Calendar</button>`;
-  else if(activeTab==='routine')
-    f.innerHTML=`<button class="btn-ghost" onclick="resetDay()">Reset</button>
-      <button class="btn-primary" onclick="exportAllRoutines()">Export day → Calendar</button>`;
-  else if(activeTab==='supps')
-    f.innerHTML=`<button class="btn-ghost" onclick="resetSupps()">Reset</button>
-      <button class="btn-primary" onclick="exportSupps()">Export supplements</button>`;
-  else if(activeTab==='bio')
-    f.innerHTML=`<button class="btn-ghost" onclick="setTab('agenda')">Back to agenda</button>
-      <button class="btn-primary" onclick="document.getElementById('pdfInput').click()">Upload biomarkers</button>`;
-  else
-    f.innerHTML=`<button class="btn-ghost" onclick="clearImports()">Clear imports</button>
-      <button class="btn-primary" onclick="exportEverything()">Export day → Calendar</button>`;
-}
 function resetDay(){ state[dk()]={}; optOn[dk()]={}; render(); }
 function resetSupps(){ suppState[dk()]={}; render(); }
 function clearImports(){ if(confirm('Remove all imported events?')){ IMPORTED=[]; importInfo=''; render(); } }
