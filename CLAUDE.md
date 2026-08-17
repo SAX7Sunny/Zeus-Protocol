@@ -65,6 +65,10 @@ Per-day state is keyed by date string: `state[dateKey][routineId]` for ticks,
 `optOn[dateKey][routineId]` for which optional routines are switched on that
 day. Optional routines reset every day by design.
 
+The Supabase schema (phase 5) lives in `zeus-schema.sql` — never duplicate
+table or policy definitions elsewhere, including in `ROADMAP.md`. Re-run
+`rls-check.sql` after any change to tables or policies.
+
 ---
 
 ## Privacy

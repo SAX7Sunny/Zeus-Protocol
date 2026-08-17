@@ -22,28 +22,12 @@ until now for lack of a server-side component, not for lack of app code.
 - Project in **eu-central-1 (Frankfurt)**, so data stays in the EU.
 - Auth: email + password via `supabase-js` from CDN.
 - Schema: one JSON row per user, mirroring what `saveAll()` already writes.
+  Full schema and RLS policies live in `zeus-schema.sql` — do not duplicate
+  them here.
 
-```sql
-create table app_data (
-  user_id uuid primary key references auth.users on delete cascade,
-  payload jsonb not null,
-  updated_at timestamptz default now()
-);
-
-create table consents (
-  user_id uuid primary key references auth.users on delete cascade,
-  accepted_at timestamptz not null,
-  version text not null
-);
-
-alter table app_data enable row level security;
-alter table consents enable row level security;
-
-create policy "own rows" on app_data
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "own consent" on consents
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-```
+**Deployed and verified.** Schema and policies are live on the Supabase
+project (eu-central-1). RLS verified 2026-08-17 via `rls-check.sql`: reads
+are scoped per user, and cross-user writes are rejected.
 
 - Sync: local-first. Load on start, push on change.
 - **Free tier pauses after 7 days of inactivity.** Keep alive with a GitHub
