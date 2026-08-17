@@ -89,6 +89,7 @@
   .tag.health{color:var(--frost);} .tag.sport{color:var(--clay);}
   .tag.mental{color:var(--moss);} .tag.planning{color:var(--amber);}
   .tag.imported{color:var(--frost);} .tag.event{color:var(--frost);} .tag.once{color:var(--amber);}
+  .tag-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:5px; vertical-align:middle; }
   .dose { flex-shrink:0; font-size:12.5px; font-weight:700; color:var(--clay);
     background:var(--clay-soft); padding:4px 8px; border-radius:7px; }
 
@@ -195,6 +196,16 @@
   .gid-input { width:100%; padding:11px 13px; background:var(--bg); border:1px solid var(--line);
     border-radius:10px; color:var(--ink); font-size:12.5px; font-family:ui-monospace,Menlo,monospace;
     margin-bottom:9px; }
+  .sub-row { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--line); }
+  .sub-swatch { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .sub-info { flex:1; min-width:0; }
+  .sub-name { font-size:13px; font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sub-meta { font-size:11.5px; color:var(--muted); margin-top:2px; }
+  .sub-meta.err { color:var(--rose); }
+  .sub-empty { font-size:12.5px; color:var(--muted); padding:10px 0; border-top:1px solid var(--line); }
+  .sub-add { display:flex; gap:8px; align-items:center; margin-top:12px; }
+  .sub-add .gid-input { margin-bottom:0; }
+  .sub-add .gbtn { flex:none; padding:11px 14px; white-space:nowrap; }
   details.help { margin-top:12px; }
   details.help summary { font-size:12.5px; color:var(--frost); font-weight:600; cursor:pointer; }
   details.help ol { margin:10px 0 0 18px; font-size:12.5px; color:var(--muted); line-height:1.7; }
@@ -458,8 +469,8 @@ let seenDefaults=[];   // ids already reconciled against saved data
    Browsers cannot fetch Google/iCloud .ics directly (no CORS headers),
    so the URL is routed through a proxy you control.
    ====================================================================== */
-let SUB_URL='', SUB_PROXY='', SUB_MINUTES=15;
-let subEvents=[], subStatus='idle', subMsg='', subLast=null, subTimer=null;
+let SUBS=[], SUB_PROXY='', SUB_MINUTES=15, subTimer=null;
+const SUB_COLORS=['#6fc4d8','#8fce8a','#e89b6c','#d4bd6e','#e88a8a'];
 
 function proxied(url){
   let u=url.trim().replace(/^webcal:\/\//i,'https://');
@@ -468,39 +479,64 @@ function proxied(url){
   return p.includes('{url}') ? p.replace('{url}',encodeURIComponent(u))
        : p.replace(/\/$/,'')+'/'+u;
 }
+function hostnameOf(url){
+  try{ return new URL(url.trim().replace(/^webcal:\/\//i,'https://')).hostname.replace(/^www\./,''); }
+  catch{ return 'Calendar'; }
+}
 
-async function subFetch(quiet){
-  if(!SUB_URL){ subStatus='error'; subMsg='Paste your calendar URL first.'; return render(); }
-  if(!quiet){ subStatus='loading'; subMsg='Fetching calendar…'; render(); }
+async function subFetchOne(sub,quiet){
+  if(!quiet){ sub.status='loading'; sub.msg='Fetching calendar…'; render(); }
   try{
-    const r=await fetch(proxied(SUB_URL),{headers:{'Accept':'text/calendar'}});
+    const r=await fetch(proxied(sub.url),{headers:{'Accept':'text/calendar'}});
     if(!r.ok) throw new Error('Server replied '+r.status+'. Check the URL and your proxy.');
     const txt=await r.text();
     if(!/BEGIN:VCALENDAR/i.test(txt)) throw new Error('That URL did not return an iCal feed.');
-    subEvents=parseICS(txt).map(e=>({...e,src:'sub'}));
-    subStatus='live'; subMsg=''; subLast=new Date();
-    if(subTimer) clearInterval(subTimer);
-    subTimer=setInterval(()=>subFetch(true),Math.max(5,SUB_MINUTES)*60000);
-    (quiet&&activeTab==='cal')?refreshDots():render();
+    const cn=extractCalName(txt);
+    if(cn) sub.name=cn;
+    sub.events=parseICS(txt).map(e=>({...e,src:'sub',subId:sub.id}));
+    sub.status='live'; sub.msg=''; sub.last=new Date();
   }catch(e){
-    subStatus='error';
-    subMsg=/Failed to fetch|NetworkError|CORS/i.test(e.message)
-      ? 'Blocked by the browser (CORS). Add a proxy URL below — see setup notes.'
+    sub.status='error';
+    sub.msg=/Failed to fetch|NetworkError|CORS/i.test(e.message)
+      ? 'Blocked by the browser (CORS). Add a proxy URL above — see setup notes.'
       : e.message;
-    render();
   }
 }
-function subConnect(){
-  const u=document.getElementById('subUrl'), p=document.getElementById('subProxy'), m=document.getElementById('subMin');
-  if(u) SUB_URL=u.value.trim();
-  if(p) SUB_PROXY=p.value.trim();
-  if(m) SUB_MINUTES=parseInt(m.value)||15;
-  subFetch(false);
+function subFetchAll(quiet){
+  if(!SUBS.length) return Promise.resolve();
+  return Promise.allSettled(SUBS.map(s=>subFetchOne(s,quiet))).then(()=>{
+    saveAll();
+    (quiet&&activeTab==='cal')?refreshDots():render();
+  });
 }
-function subDisconnect(){
-  SUB_URL=''; subEvents=[]; subStatus='idle'; subMsg=''; subLast=null;
-  if(subTimer){ clearInterval(subTimer); subTimer=null; }
+function startSubTimer(){
+  if(subTimer) clearInterval(subTimer);
+  if(!SUBS.length) return;
+  subTimer=setInterval(()=>subFetchAll(true),Math.max(5,SUB_MINUTES)*60000);
+}
+function subSetProxy(v){ SUB_PROXY=v.trim(); saveAll(); }
+function subSetMinutes(v){ SUB_MINUTES=parseInt(v)||15; startSubTimer(); saveAll(); }
+
+function subAddCalendar(){
+  const inp=document.getElementById('subNewUrl'); if(!inp) return;
+  const url=inp.value.trim(); if(!url) return;
+  const sub={id:'s'+Date.now()+Math.floor(Math.random()*1000), url,
+    name:hostnameOf(url), color:SUB_COLORS[SUBS.length%SUB_COLORS.length],
+    status:'loading', msg:'Fetching calendar…', last:null, events:[]};
+  SUBS.push(sub);
   render();
+  subFetchOne(sub,false).then(()=>{ startSubTimer(); saveAll(); render(); });
+}
+function subRefreshOne(id){
+  const s=SUBS.find(x=>x.id===id); if(!s) return;
+  subFetchOne(s,false).then(()=>{ saveAll(); render(); });
+}
+function subRemoveCalendar(id){
+  const i=SUBS.findIndex(s=>s.id===id); if(i<0) return;
+  if(!confirm('Remove "'+(SUBS[i].name||'this calendar')+'"?')) return;
+  SUBS.splice(i,1);
+  startSubTimer();
+  saveAll(); render();
 }
 
 let IMPORTED=[];           // {id,title,start:Date,dur,allDay,rrule,src:'ics'|'manual'}
@@ -517,7 +553,9 @@ function saveAll(){
     localStorage.setItem(DB_KEY, JSON.stringify({
       v:2, ROUTINES, SUPP_BLOCKS, state, suppState, optOn, PANELS, seenDefaults,
       IMPORTED: IMPORTED.map(e=>({...e,start:e.start.toISOString()})),
-      SUB_URL, SUB_PROXY, SUB_MINUTES
+      SUBS: SUBS.map(s=>({id:s.id,url:s.url,name:s.name,color:s.color,status:s.status,msg:s.msg,
+        last:s.last?new Date(s.last).toISOString():null})),
+      SUB_PROXY, SUB_MINUTES
     }));
     lastSaveOk=true;
   }catch(e){ canPersist=false; lastSaveOk=false; }
@@ -534,7 +572,15 @@ function loadAll(){
     state=d.state||{}; suppState=d.suppState||{}; optOn=d.optOn||{};
     IMPORTED=(d.IMPORTED||[]).map(e=>({...e,start:new Date(e.start)}));
     PANELS=d.PANELS||[];
-    SUB_URL=d.SUB_URL||''; SUB_PROXY=d.SUB_PROXY||''; SUB_MINUTES=d.SUB_MINUTES||15;
+    if(Array.isArray(d.SUBS)){
+      SUBS=d.SUBS.map(s=>({...s,last:s.last?new Date(s.last):null,events:[]}));
+    }else if(d.SUB_URL){
+      SUBS=[{id:'s'+Date.now(),url:d.SUB_URL,name:hostnameOf(d.SUB_URL),color:SUB_COLORS[0],
+        status:'idle',msg:'',last:null,events:[]}];
+    }else{
+      SUBS=[];
+    }
+    SUB_PROXY=d.SUB_PROXY||''; SUB_MINUTES=d.SUB_MINUTES||15;
     lastSaveOk=true;
   }catch(e){ canPersist=false; lastSaveOk=false; }
 }
@@ -772,6 +818,10 @@ const allSupps=()=>SUPP_BLOCKS.flatMap(b=>b.items);
 
 /* ---------- ICS PARSING ---------- */
 function unescapeICS(s){ return s.replace(/\\n/gi,' ').replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\\\/g,'\\'); }
+function extractCalName(text){
+  const m=text.replace(/\r\n[ \t]/g,'').replace(/\n[ \t]/g,'').match(/^X-WR-CALNAME:(.+)$/mi);
+  return m?unescapeICS(m[1].trim()):null;
+}
 function parseICSDate(v){
   const m=String(v).match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/);
   if(!m) return null;
@@ -842,7 +892,7 @@ function occursOn(ev,day){
     default: return diff===0;
   }
 }
-const allEventSources=()=>IMPORTED.concat(subEvents);
+const allEventSources=()=>IMPORTED.concat(SUBS.flatMap(s=>s.events));
 const eventsOn=d=>allEventSources().filter(e=>occursOn(e,d))
   .sort((a,b)=>(a.allDay?-1:0)-(b.allDay?-1:0)||hhmm(a.start).localeCompare(hhmm(b.start)));
 const eventsOnDay=()=>eventsOn(viewDate);
@@ -1028,9 +1078,12 @@ function renderAgenda(c){
     } else {
       const e=a.ref;
       row.className='row';
+      const sub=e.src==='sub'?SUBS.find(s=>s.id===e.subId):null;
+      const dot=sub?`<span class="tag-dot" style="background:${sub.color}"></span>`:'';
+      const label=sub?esc(sub.name):(e.src==='sub'?'Calendar':'Imported');
       row.innerHTML=`<span class="ag-time">${a.allDay?'all<small>day</small>':a.t+'<small>'+e.dur+' min</small>'}</span>
         <div class="rbody"><div class="rtitle">${esc(e.title)}</div>
-          <div class="rmeta"><span class="tag ${e.src==='sub'?'google':'imported'}">${e.src==='sub'?'Calendar':'Imported'}</span></div></div>
+          <div class="rmeta"><span class="tag ${e.src==='sub'?'google':'imported'}">${dot}${label}</span></div></div>
         ${e.src==='sub'?'':`<div class="acts"><button class="ico del" data-edel="${e.id}">✕</button></div>`}`;
     }
     c.appendChild(row);
@@ -1102,26 +1155,35 @@ function monthBlock(offset){
     </div>`;
 }
 
+function subRowHTML(s){
+  const when=s.last?new Date(s.last).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';
+  const meta=s.status==='loading' ? 'Fetching…'
+    : s.status==='error' ? (s.msg?esc(s.msg):'Error')
+    : `${s.events.length} event${s.events.length===1?'':'s'}${when?' · updated '+when:''}`;
+  return `<div class="sub-row">
+    <span class="sub-swatch" style="background:${s.color}"></span>
+    <div class="sub-info">
+      <div class="sub-name">${esc(s.name||hostnameOf(s.url))}</div>
+      <div class="sub-meta${s.status==='error'?' err':''}">${meta}</div>
+    </div>
+    <button class="ico edit" onclick="subRefreshOne('${s.id}')" title="Refresh">⟳</button>
+    <button class="ico del" onclick="subRemoveCalendar('${s.id}')" title="Remove">✕</button>
+  </div>`;
+}
+
 function subCardHTML(){
-  const live=subStatus==='live';
-  const when=subLast?subLast.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';
-  if(live) return `<div class="gcard on">
-    <div class="gtop"><span class="gdot live"></span><span class="gtitle">Calendar subscription</span></div>
-    <div class="gsub">Live · <b>${subEvents.length}</b> events · updated ${when}<br>
-      Re-checks every ${SUB_MINUTES} min. Read-only — your routines stay in this app.</div>
-    <div class="grow">
-      <button class="gbtn sec" onclick="subDisconnect()">Disconnect</button>
-      <button class="gbtn pri" onclick="subFetch(false)">Refresh now</button>
-    </div></div>`;
-  const dot=subStatus==='error'?'err':'';
+  const rows=SUBS.map(subRowHTML).join('');
   return `<div class="gcard">
-    <div class="gtop"><span class="gdot ${dot}"></span><span class="gtitle">Calendar subscription</span></div>
-    <div class="gsub">${subStatus==='loading'?'Fetching…':subMsg?esc(subMsg):
-      'Paste the secret iCal address of your Google or iCloud calendar. Read-only, refreshes on its own.'}</div>
-    <input class="gid-input" id="subUrl" value="${esc(SUB_URL)}" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
-    <input class="gid-input" id="subProxy" value="${esc(SUB_PROXY)}" placeholder="Proxy prefix (required) — e.g. https://you.workers.dev/?url={url}">
-    <input class="gid-input" id="subMin" type="number" min="5" value="${SUB_MINUTES}" placeholder="Refresh minutes">
-    <div class="grow"><button class="gbtn pri" onclick="subConnect()">Subscribe</button></div>
+    <div class="gtop"><span class="gtitle">Calendar subscriptions</span></div>
+    <div class="gsub">Paste the secret iCal address of a Google or iCloud calendar. Read-only, refreshes on its own.<br>
+      Re-checks every ${SUB_MINUTES} min. Your routines stay in this app.</div>
+    <input class="gid-input" id="subProxy" value="${esc(SUB_PROXY)}" placeholder="Proxy prefix (required) — e.g. https://you.workers.dev/?url={url}" onchange="subSetProxy(this.value)">
+    <input class="gid-input" id="subMin" type="number" min="5" value="${SUB_MINUTES}" placeholder="Refresh minutes" onchange="subSetMinutes(this.value)">
+    ${rows||'<div class="sub-empty">No calendars added yet.</div>'}
+    <div class="sub-add">
+      <input class="gid-input" id="subNewUrl" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
+      <button class="gbtn pri" onclick="subAddCalendar()">＋ Add calendar</button>
+    </div>
     <details class="help"><summary>Why a proxy, and how to set one up</summary><ol>
       <li>Google and iCloud send no <code>CORS</code> header, so the browser blocks a direct fetch. A proxy adds it.</li>
       <li>Cloudflare Workers is free: dash.cloudflare.com → Workers → Create.</li>
@@ -1522,7 +1584,7 @@ function exportEverything(){
 loadAll();
 render();
 setInterval(renderEatWindow,60000);
-if(SUB_URL) subFetch(true);
+if(SUBS.length){ startSubTimer(); subFetchAll(true); }
 </script>
 </body>
 </html>
