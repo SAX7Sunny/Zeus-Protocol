@@ -34,7 +34,8 @@
     max-width:640px; margin:0 auto; min-height:100vh; }
 
   header { padding:18px 20px 0; border-bottom:1px solid var(--line);
-    position:sticky; top:0; background:var(--bg); z-index:10; }
+    position:fixed; top:0; left:50%; transform:translateX(-50%); width:100%; max-width:640px;
+    background:var(--bg); z-index:10; }
 
   .brandrow { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
   .brandtext { min-width:0; }
@@ -1185,6 +1186,15 @@ function renderFilters(){
   });
 }
 
+// header is position:fixed (out of flow) so it stays put while everything
+// below it scrolls; this keeps body's top padding matched to its actual
+// height, which changes per tab (daynav/progress/eatbar show or hide).
+function syncHeaderHeight(){
+  const h=document.querySelector('header'); if(!h) return;
+  document.body.style.paddingTop=h.offsetHeight+'px';
+}
+window.addEventListener('resize',syncHeaderHeight);
+
 function render(){
   renderDate(); renderFilters();
   const c=document.getElementById('content'); c.innerHTML='';
@@ -1194,6 +1204,7 @@ function render(){
   else if(activeTab==='cal') renderCalendar(c);
   else renderBio(c);
   renderProgress(); renderEatWindow(); renderFooter(); saveAll();
+  syncHeaderHeight();
 }
 
 function renderRoutine(c){
