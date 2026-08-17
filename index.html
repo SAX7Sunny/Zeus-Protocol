@@ -38,8 +38,8 @@
 
   /* The fixed header is out of flow, so body's safe-area padding does not
      apply to it — it carries its own inset. The inset is 0 now that the
-     status bar is opaque ("black"), and the 24px is plain breathing room. */
-  header { padding:calc(24px + env(safe-area-inset-top)) 20px 0; border-bottom:1px solid var(--line);
+     status bar is opaque ("black"), and the 40px is plain breathing room. */
+  header { padding:calc(40px + env(safe-area-inset-top)) 20px 0; border-bottom:1px solid var(--line);
     position:fixed; top:0; left:50%; transform:translateX(-50%); width:100%; max-width:640px;
     background:var(--bg); z-index:10; }
 
