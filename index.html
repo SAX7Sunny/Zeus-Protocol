@@ -540,6 +540,7 @@ let seenDefaults=[];   // ids already reconciled against saved data
 let SUBS=[], SUB_PROXY='', SUB_MINUTES=15, subTimer=null;
 let colorPickerFor=null;
 let calSubOpen=false;   // manual override; the card is always shown when SUBS is empty
+let calDataOpen=false;  // backup/export/import section, collapsed by default
 const CAL_COLORS=['#6fc4d8','#88a4dd','#9688dd','#c188dd','#dd88cf','#dd88a4',
                   '#dd9688','#ddc188','#cfdd88','#a4dd88','#88dd96','#88ddc1'];
 function eventColor(e){
@@ -1416,6 +1417,34 @@ function pickSubColor(id,color){
   saveAll(); render();
 }
 
+function calDataSectionHTML(){
+  if(!canPersist){
+    return `<div class="note warn" style="margin:0 6px 4px">
+      <strong>Not being saved.</strong> This preview blocks browser storage — download the file and open it locally to keep changes.
+    </div>`;
+  }
+  if(!calDataOpen){
+    return `<div class="gcard cal-collapsed" onclick="calDataOpen=true;render()">
+      <div class="gtop"><span class="gtitle">Data &amp; backup</span>
+        <span class="cal-collapsed-meta">›</span></div>
+    </div>`;
+  }
+  return `<div class="gcard">
+    <div class="gtop"><span class="gtitle">Data &amp; backup</span>
+      <button class="ico edit" onclick="calDataOpen=false;render()" title="Hide">︿</button></div>
+    <div class="gsub"><b>Saved on this device.</b> Your routines, supplements and daily ticks survive a reload.</div>
+    <div class="backup-row" style="margin-top:0">
+      <button class="opt-pill" onclick="exportBackup()">Export backup</button>
+      <button class="opt-pill" onclick="document.getElementById('backupInput').click()">Import backup</button>
+      <button class="opt-pill off" onclick="wipeAll()">Erase all saved data</button>
+    </div>
+    <div class="compact-import" style="margin:14px 0 0">
+      <div class="ci-txt">Or import a one-off <strong>.ics</strong> export${importInfo?'<br>'+esc(importInfo):''}</div>
+      <button onclick="document.getElementById('fileInput').click()">Import</button>
+    </div>
+  </div>`;
+}
+
 function subCardHTML(){
   const hasSubs=SUBS.length>0;
   if(hasSubs && !calSubOpen){
@@ -1665,22 +1694,7 @@ function renderWeekView(c){
 function renderCalendar(c){
   if(calMode==='day'){ renderDayView(c); return; }
   c.insertAdjacentHTML('beforeend', subCardHTML());
-  c.insertAdjacentHTML('beforeend',
-    `<div class="note${canPersist?'':' warn'}" style="margin:0 6px 4px">
-      ${canPersist
-        ? '<strong>Saved on this device.</strong> Your routines, supplements and daily ticks survive a reload.'
-        : '<strong>Not being saved.</strong> This preview blocks browser storage — download the file and open it locally to keep changes.'}
-      ${canPersist?`<br><div class="backup-row">
-        <button class="opt-pill" onclick="exportBackup()">Export backup</button>
-        <button class="opt-pill" onclick="document.getElementById('backupInput').click()">Import backup</button>
-        <button class="opt-pill off" onclick="wipeAll()">Erase all saved data</button>
-      </div>`:''}
-    </div>`);
-  c.insertAdjacentHTML('beforeend',
-    `<div class="compact-import">
-      <div class="ci-txt">Or import a one-off <strong>.ics</strong> export${importInfo?'<br>'+esc(importInfo):''}</div>
-      <button onclick="document.getElementById('fileInput').click()">Import</button>
-    </div>`);
+  c.insertAdjacentHTML('beforeend', calDataSectionHTML());
 
   c.insertAdjacentHTML('beforeend',
     `<div class="cal-view-switch">
