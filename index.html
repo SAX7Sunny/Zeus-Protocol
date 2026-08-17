@@ -156,7 +156,6 @@
   .cell.wknd .num { color:var(--muted); }
   .dots { display:flex; gap:3px; height:5px; }
   .dot { width:5px; height:5px; border-radius:50%; }
-  .dot.cal { background:var(--frost); }
   .dot.once { background:var(--amber); }
   .dot.sport { background:var(--clay); }
   .month-hint { text-align:center; color:var(--faint); font-size:12.5px; padding:6px 0 26px; }
@@ -222,11 +221,15 @@
     border-radius:10px; color:var(--ink); font-size:12.5px; font-family:ui-monospace,Menlo,monospace;
     margin-bottom:9px; }
   .sub-row { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--line); }
-  .sub-swatch { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .sub-swatch { width:10px; height:10px; border-radius:50%; flex-shrink:0; border:none; padding:0;
+    cursor:pointer; outline:1px solid var(--line); }
   .sub-info { flex:1; min-width:0; }
   .sub-name { font-size:13px; font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .sub-meta { font-size:11.5px; color:var(--muted); margin-top:2px; }
   .sub-meta.err { color:var(--rose); }
+  .color-picker { display:flex; flex-wrap:wrap; gap:8px; padding:10px 0; }
+  .color-swatch { width:26px; height:26px; border-radius:50%; border:none; padding:0; flex-shrink:0; cursor:pointer; }
+  .color-swatch.active { outline:2px solid var(--ink); outline-offset:2px; }
   .sub-empty { font-size:12.5px; color:var(--muted); padding:10px 0; border-top:1px solid var(--line); }
   .sub-add { display:flex; gap:8px; align-items:center; margin-top:12px; }
   .sub-add .gid-input { margin-bottom:0; }
@@ -500,7 +503,13 @@ let seenDefaults=[];   // ids already reconciled against saved data
    so the URL is routed through a proxy you control.
    ====================================================================== */
 let SUBS=[], SUB_PROXY='', SUB_MINUTES=15, subTimer=null;
-const SUB_COLORS=['#6fc4d8','#8fce8a','#e89b6c','#d4bd6e','#e88a8a'];
+let colorPickerFor=null;
+const CAL_COLORS=['#6fc4d8','#88a4dd','#9688dd','#c188dd','#dd88cf','#dd88a4',
+                  '#dd9688','#ddc188','#cfdd88','#a4dd88','#88dd96','#88ddc1'];
+function eventColor(e){
+  if(e.src==='sub'){ const s=SUBS.find(x=>x.id===e.subId); return s?s.color:'#6fc4d8'; }
+  return '#6fc4d8';
+}
 
 function proxied(url){
   let u=url.trim().replace(/^webcal:\/\//i,'https://');
@@ -551,7 +560,7 @@ function subAddCalendar(){
   const inp=document.getElementById('subNewUrl'); if(!inp) return;
   const url=inp.value.trim(); if(!url) return;
   const sub={id:'s'+Date.now()+Math.floor(Math.random()*1000), url,
-    name:hostnameOf(url), color:SUB_COLORS[SUBS.length%SUB_COLORS.length],
+    name:hostnameOf(url), color:CAL_COLORS[SUBS.length%CAL_COLORS.length],
     status:'loading', msg:'Fetching calendar…', last:null, events:[]};
   SUBS.push(sub);
   render();
@@ -618,7 +627,7 @@ function loadAll(){
     if(Array.isArray(d.SUBS)){
       SUBS=d.SUBS.map(s=>({...s,last:s.last?new Date(s.last):null,events:[]}));
     }else if(d.SUB_URL){
-      SUBS=[{id:'s'+Date.now(),url:d.SUB_URL,name:hostnameOf(d.SUB_URL),color:SUB_COLORS[0],
+      SUBS=[{id:'s'+Date.now(),url:d.SUB_URL,name:hostnameOf(d.SUB_URL),color:CAL_COLORS[0],
         status:'idle',msg:'',last:null,events:[]}];
     }else{
       SUBS=[];
@@ -1230,10 +1239,16 @@ const MONTH_NAMES=['January','February','March','April','May','June','July','Aug
 
 function dayFlags(d){
   const k=key(d);
-  const cal=eventsOn(d).length;
+  const calColors=[...new Set(eventsOn(d).map(eventColor))];
   const once=ROUTINES.filter(r=>r.date===k).length;
   const sport=activeRoutinesOn(d).filter(r=>r.cat==='sport').length;
-  return {cal,once,sport};
+  return {calColors,once,sport};
+}
+function dotsHTML(f){
+  let dots=f.calColors.slice(0,4).map(c=>`<span class="dot" style="background:${c}"></span>`).join('');
+  if(f.once) dots+='<span class="dot once"></span>';
+  if(f.sport) dots+='<span class="dot sport"></span>';
+  return dots;
 }
 
 function monthBlock(offset){
@@ -1253,12 +1268,8 @@ function monthBlock(offset){
     if(sameDay(dt,today)) cls.push('today');
     if(sameDay(dt,viewDate)) cls.push('sel');
     if(dt.getDay()===0||dt.getDay()===6) cls.push('wknd');
-    let dots='';
-    if(f.cal) dots+='<span class="dot cal"></span>';
-    if(f.once) dots+='<span class="dot once"></span>';
-    if(f.sport) dots+='<span class="dot sport"></span>';
     cells+=`<button class="${cls.join(' ')}" data-day="${key(dt)}">
-      <span class="num">${d}</span><span class="dots">${dots}</span></button>`;
+      <span class="num">${d}</span><span class="dots">${dotsHTML(f)}</span></button>`;
   }
   return `<div class="month" id="m${offset}">
       <div class="mhead">${MONTH_NAMES[mo]} <span>${y}</span></div>
@@ -1267,20 +1278,38 @@ function monthBlock(offset){
     </div>`;
 }
 
+function colorPickerHTML(s){
+  const swatches=CAL_COLORS.map(c=>
+    `<button class="color-swatch${s.color===c?' active':''}" style="background:${c}" onclick="pickSubColor('${s.id}','${c}')"></button>`
+  ).join('');
+  return `<div class="color-picker">${swatches}</div>`;
+}
+
 function subRowHTML(s){
   const when=s.last?new Date(s.last).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';
   const meta=s.status==='loading' ? 'Fetching…'
     : s.status==='error' ? (s.msg?esc(s.msg):'Error')
     : `${s.events.length} event${s.events.length===1?'':'s'}${when?' · updated '+when:''}`;
   return `<div class="sub-row">
-    <span class="sub-swatch" style="background:${s.color}"></span>
+    <button class="sub-swatch" style="background:${s.color}" onclick="toggleColorPicker('${s.id}')" title="Change colour"></button>
     <div class="sub-info">
       <div class="sub-name">${esc(s.name||hostnameOf(s.url))}</div>
       <div class="sub-meta${s.status==='error'?' err':''}">${meta}</div>
     </div>
     <button class="ico edit" onclick="subRefreshOne('${s.id}')" title="Refresh">⟳</button>
     <button class="ico del" onclick="subRemoveCalendar('${s.id}')" title="Remove">✕</button>
-  </div>`;
+  </div>${colorPickerFor===s.id?colorPickerHTML(s):''}`;
+}
+
+function toggleColorPicker(id){
+  colorPickerFor=colorPickerFor===id?null:id;
+  render();
+}
+function pickSubColor(id,color){
+  const s=SUBS.find(x=>x.id===id); if(!s) return;
+  s.color=color;
+  colorPickerFor=null;
+  saveAll(); render();
 }
 
 function subCardHTML(){
@@ -1310,11 +1339,7 @@ function refreshDots(){
   document.querySelectorAll('[data-day]').forEach(b=>{
     const [y,m,d]=b.dataset.day.split('-').map(Number);
     const f=dayFlags(new Date(y,m-1,d));
-    let dots='';
-    if(f.cal) dots+='<span class="dot cal"></span>';
-    if(f.once) dots+='<span class="dot once"></span>';
-    if(f.sport) dots+='<span class="dot sport"></span>';
-    const el=b.querySelector('.dots'); if(el) el.innerHTML=dots;
+    const el=b.querySelector('.dots'); if(el) el.innerHTML=dotsHTML(f);
   });
 }
 
@@ -1398,7 +1423,7 @@ function renderDayView(c){
 
   if(allDayItems.length){
     const rows=allDayItems.map(a=>{
-      const e=a.ref, sub=e.src==='sub'?SUBS.find(s=>s.id===e.subId):null, color=sub?sub.color:'#6fc4d8';
+      const e=a.ref, color=eventColor(e);
       return `<div class="day-allday" style="border-left-color:${color};background:${hexA(color,0.16)}">${esc(e.title)}</div>`;
     }).join('');
     c.insertAdjacentHTML('beforeend',`<div class="day-allday-strip">${rows}</div>`);
@@ -1416,9 +1441,9 @@ function renderDayView(c){
       start=h*60+m; dur=10; title='Supplements · '+b.title; color='#6fc4d8';
       tap=`onclick="setTab('supps')"`;
     } else {
-      const e=a.ref, sub=e.src==='sub'?SUBS.find(s=>s.id===e.subId):null;
+      const e=a.ref;
       start=e.start.getHours()*60+e.start.getMinutes(); dur=e.dur; title=e.title;
-      color=sub?sub.color:'#6fc4d8';
+      color=eventColor(e);
     }
     return {start,end:start+Math.max(dur,1),dur,title,color,dim,tap};
   });
