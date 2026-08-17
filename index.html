@@ -188,6 +188,23 @@
   .now-line-day::before { content:''; position:absolute; left:-4px; top:-3.25px; width:8px; height:8px;
     border-radius:50%; background:var(--rose); }
 
+  /* Week view */
+  .cal-view-switch { display:flex; gap:8px; margin:0 6px 14px; }
+  .week-head { display:flex; align-items:center; justify-content:space-between; padding:4px 6px 14px; }
+  .week-list { display:flex; flex-direction:column; }
+  .week-day { display:flex; gap:12px; padding:10px 6px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .week-day-head { flex-shrink:0; width:32px; display:flex; flex-direction:column; align-items:center; gap:3px; }
+  .week-dow { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); font-weight:700; }
+  .week-daynum { font-size:15px; font-weight:700; width:28px; height:28px; border-radius:50%; display:grid; place-items:center; }
+  .week-day.today .week-daynum { background:var(--frost); color:var(--bg); }
+  .week-items { flex:1; min-width:0; display:flex; flex-direction:column; gap:5px; padding-top:2px; }
+  .week-item { display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink); }
+  .week-item.dim { opacity:.4; }
+  .week-time { flex-shrink:0; width:42px; color:var(--muted); font-weight:600; font-size:11.5px; }
+  .week-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .week-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+  .week-empty { font-size:12px; color:var(--faint); font-style:italic; padding-top:2px; }
+
   /* Agenda */
   .ag-time { flex-shrink:0; width:50px; font-size:13px; font-weight:700; color:var(--frost); line-height:1.3; }
   .ag-time small { display:block; font-size:10.5px; color:var(--faint); font-weight:600; }
@@ -295,7 +312,7 @@
 
 
   .eatbar { margin-top:12px; display:none; }
-  .eatbar.show { display:block; }
+  .eatbar.show { display:block; cursor:pointer; }
   .eat-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; gap:10px; }
   .eat-label { font-size:11px; font-weight:800; letter-spacing:.11em; text-transform:uppercase; }
   .eat-left { font-size:12.5px; font-weight:700; white-space:nowrap; }
@@ -371,7 +388,7 @@
     <div class="progress-head"><span class="pct" id="pct">0%</span><span class="pct-sub">done</span></div>
     <div class="progress-track"><div class="progress-bar" id="bar"></div></div>
   </div>
-  <div class="eatbar" id="eatbar"></div>
+  <div class="eatbar" id="eatbar" onclick="openEatSheet()"></div>
   <div class="tabs">
     <button class="tab active" id="tab-agenda" onclick="setTab('agenda')">Agenda</button>
     <button class="tab" id="tab-routine" onclick="setTab('routine')">Routine</button>
@@ -394,7 +411,7 @@
   <div class="sheet">
     <h2 id="sheetTitle">Add routine</h2>
     <p class="hint" id="sheetHint">Create a new item.</p>
-    <div class="field"><label id="f-name-label">Name</label><input id="f-name" placeholder="e.g. Meditation"></div>
+    <div class="field" id="f-name-field"><label id="f-name-label">Name</label><input id="f-name" placeholder="e.g. Meditation"></div>
 
     <div id="routineFields">
       <div class="row2">
@@ -445,6 +462,13 @@
 
     <div id="panelFields" style="display:none">
       <div class="field"><label>Date</label><input id="p-date" type="date"></div>
+    </div>
+
+    <div id="eatFields" style="display:none">
+      <div class="row2">
+        <div class="field"><label>Start time</label><input id="eat-start-in" type="time" value="09:00"></div>
+        <div class="field"><label>Duration · hours</label><input id="eat-dur-in" type="number" value="8" min="1" max="16" step="0.5"></div>
+      </div>
     </div>
 
     <div class="sheet-actions">
@@ -600,7 +624,7 @@ function backupData(){
     IMPORTED: IMPORTED.map(e=>({...e,start:e.start.toISOString()})),
     SUBS: SUBS.map(s=>({id:s.id,url:s.url,name:s.name,color:s.color,status:s.status,msg:s.msg,
       last:s.last?new Date(s.last).toISOString():null})),
-    SUB_PROXY, SUB_MINUTES
+    SUB_PROXY, SUB_MINUTES, EAT_START, EAT_END
   };
 }
 function saveAll(){
@@ -640,6 +664,8 @@ function applyBackup(d){
     SUBS=[];
   }
   SUB_PROXY=d.SUB_PROXY||''; SUB_MINUTES=d.SUB_MINUTES||15;
+  if(typeof d.EAT_START==='number') EAT_START=d.EAT_START;
+  if(typeof d.EAT_END==='number') EAT_END=d.EAT_END;
 }
 
 function loadAll(){
@@ -919,7 +945,7 @@ async function handlePdf(file){
 }
 
 let activeTab='agenda', activeFilter='all', editing=null, mode='repeat', selDows=[0,1,2,3,4,5,6];
-let calMode='month';
+let calMode='week', calReturnMode='week';
 let viewDate=new Date(); viewDate.setHours(0,0,0,0);
 let state={}, suppState={}, optOn={};   // optOn[dateKey][routineId] = active for that day
 
@@ -931,8 +957,10 @@ function optMarks(d){ const k=key(d||viewDate); if(!optOn[k]) optOn[k]={}; retur
 const isOptActive=(r,d)=>!r.optional || !!optMarks(d)[r.id];
 const activeRoutinesOn=d=>routinesOn(d).filter(r=>isOptActive(r,d));
 /* ---------- EATING WINDOW ----------
-   Change these two numbers to move the window. */
-const EAT_START=9, EAT_END=17;
+   Decimal hours (9.5 = 09:30). Editable from the dashboard widget;
+   persisted via saveAll()/loadAll(). */
+let EAT_START=9, EAT_END=17;
+const hoursToHHMM=x=>{ const h=Math.floor(x), m=Math.round((x-h)*60); return pad(h)+':'+pad(m); };
 
 function eatingState(now){
   const h=now.getHours()+now.getMinutes()/60;
@@ -959,14 +987,13 @@ function renderEatWindow(){
   if(!show){ box.innerHTML=''; return; }
   const st=eatingState(now);
   box.className='eatbar show '+(st.mode==='eating'?'eat-eating':'eat-fasting');
-  const pad2=n=>String(n).padStart(2,'0');
   box.innerHTML=`
     <div class="eat-head">
       <span class="eat-label">${st.mode==='eating'?'Eating window':'Fasting'}</span>
-      <span class="eat-left">${hm(st.left)} ${st.mode==='eating'?'left':'until '+pad2(EAT_START)+':00'}</span>
+      <span class="eat-left">${hm(st.left)} ${st.mode==='eating'?'left':'until '+hoursToHHMM(EAT_START)}</span>
     </div>
     <div class="eat-track"><div class="eat-fill" style="width:${Math.max(0,Math.min(100,st.pct))}%"></div></div>
-    <div class="eat-sub">${pad2(EAT_START)}:00 – ${pad2(EAT_END)}:00</div>`;
+    <div class="eat-sub">${hoursToHHMM(EAT_START)} – ${hoursToHHMM(EAT_END)} · tap to edit</div>`;
 }
 
 function streakFor(id,from){
@@ -1409,6 +1436,7 @@ function bindDayCells(root){
     b.onclick=()=>{
       const [y,m,d]=b.dataset.day.split('-').map(Number);
       viewDate=new Date(y,m-1,d); viewDate.setHours(0,0,0,0);
+      calReturnMode=calMode;
       calMode='day';
       render();
       scrollDayView();
@@ -1427,7 +1455,7 @@ function loadEarlier(){
   window.scrollBy(0, after-before);
 }
 
-const HOUR_PX=52;
+const HOUR_PX=84;
 
 function layoutDay(entries){
   const sorted=[...entries].sort((a,b)=>a.start-b.start||a.end-b.end);
@@ -1476,7 +1504,7 @@ function renderDayView(c){
 
   c.insertAdjacentHTML('beforeend',`
     <div class="day-head">
-      <button class="day-back" onclick="calMode='month';render()">‹ Back</button>
+      <button class="day-back" onclick="calMode=calReturnMode;render()">‹ Back</button>
       <div class="day-title">${esc(viewDate.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'}))}</div>
       <div class="day-arrows"><button onclick="shiftDay(-1)">‹</button><button onclick="shiftDay(1)">›</button></div>
     </div>`);
@@ -1510,7 +1538,7 @@ function renderDayView(c){
   layoutDay(entries);
 
   const blocksHTML=entries.map(en=>{
-    const top=en.start/60*HOUR_PX, height=Math.max(26,en.dur/60*HOUR_PX);
+    const top=en.start/60*HOUR_PX, height=Math.max(40,en.dur/60*HOUR_PX);
     const widthPct=100/en.colCount, leftPct=widthPct*en.col;
     const endMin=en.start+en.dur;
     const timeLbl=`${pad(Math.floor(en.start/60)%24)}:${pad(en.start%60)}–${pad(Math.floor(endMin/60)%24)}:${pad(endMin%60)}`;
@@ -1532,6 +1560,69 @@ function renderDayView(c){
     </div>`);
 }
 
+function weekStart(d){
+  const dt=new Date(d); dt.setHours(0,0,0,0);
+  dt.setDate(dt.getDate()-((dt.getDay()+6)%7));
+  return dt;
+}
+let weekViewStart=null;
+
+function weekRangeLabel(start){
+  const end=new Date(start); end.setDate(start.getDate()+13);
+  const sameYear=start.getFullYear()===end.getFullYear();
+  const f=(d,withYear)=>d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:withYear?'numeric':undefined});
+  return f(start,!sameYear)+' – '+f(end,true);
+}
+
+function weekStep(n){
+  const base=weekViewStart?new Date(weekViewStart):weekStart(new Date());
+  base.setDate(base.getDate()+n);
+  weekViewStart=base;
+  render();
+}
+
+function weekItemHTML(a,d){
+  if(a.kind==='routine'){
+    const r=a.ref, dim=r.optional&&!isOptActive(r,d);
+    return `<div class="week-item${dim?' dim':''}"><span class="week-time">${r.time}</span><span class="week-title">${esc(r.title)}</span></div>`;
+  }
+  if(a.kind==='supp'){
+    const b=a.ref;
+    return `<div class="week-item"><span class="week-time">${b.time}</span><span class="week-title">Supplements · ${esc(b.title)}</span></div>`;
+  }
+  const e=a.ref, color=eventColor(e);
+  return `<div class="week-item"><span class="week-dot" style="background:${color}"></span><span class="week-time">${a.allDay?'All day':a.t}</span><span class="week-title">${esc(e.title)}</span></div>`;
+}
+
+function renderWeekView(c){
+  const start=weekViewStart?new Date(weekViewStart):weekStart(new Date());
+  start.setHours(0,0,0,0);
+  const today=new Date(); today.setHours(0,0,0,0);
+
+  c.insertAdjacentHTML('beforeend',`
+    <div class="week-head">
+      <button class="day-back" onclick="weekStep(-14)">‹</button>
+      <div class="day-title">${esc(weekRangeLabel(start))}</div>
+      <button class="day-back" onclick="weekStep(14)">›</button>
+    </div>`);
+
+  const wrap=document.createElement('div'); wrap.className='week-list';
+  for(let i=0;i<14;i++){
+    const d=new Date(start); d.setDate(start.getDate()+i);
+    const items=agendaOn(d);
+    const isToday=sameDay(d,today);
+    const itemsHTML=items.length?items.map(a=>weekItemHTML(a,d)).join(''):'<div class="week-empty">Nothing scheduled</div>';
+    wrap.insertAdjacentHTML('beforeend',
+      `<div class="week-day${isToday?' today':''}" data-day="${key(d)}">
+        <div class="week-day-head"><span class="week-dow">${d.toLocaleDateString('en-GB',{weekday:'short'})}</span>
+          <span class="week-daynum">${d.getDate()}</span></div>
+        <div class="week-items">${itemsHTML}</div>
+      </div>`);
+  }
+  c.appendChild(wrap);
+  bindDayCells(wrap);
+}
+
 function renderCalendar(c){
   if(calMode==='day'){ renderDayView(c); return; }
   c.insertAdjacentHTML('beforeend', subCardHTML());
@@ -1551,6 +1642,15 @@ function renderCalendar(c){
       <div class="ci-txt">Or import a one-off <strong>.ics</strong> export${importInfo?'<br>'+esc(importInfo):''}</div>
       <button onclick="document.getElementById('fileInput').click()">Import</button>
     </div>`);
+
+  c.insertAdjacentHTML('beforeend',
+    `<div class="cal-view-switch">
+      <button class="chip${calMode==='week'?' active':''}" onclick="calMode='week';render()">Week</button>
+      <button class="chip${calMode==='month'?' active':''}" onclick="calMode='month';render()">Month</button>
+    </div>`);
+
+  if(calMode==='week'){ renderWeekView(c); return; }
+
   c.insertAdjacentHTML('beforeend','<button class="earlier-btn" onclick="loadEarlier()">‹ Earlier months</button>');
 
   const wrap=document.createElement('div'); wrap.id='monthWrap';
@@ -1782,6 +1882,8 @@ function openSheet(kind,ref){
   document.getElementById('suppFields').style.display=sheetType==='supp'?'block':'none';
   document.getElementById('eventFields').style.display=sheetType==='event'?'block':'none';
   document.getElementById('panelFields').style.display='none';
+  document.getElementById('eatFields').style.display='none';
+  document.getElementById('f-name-field').style.display='block';
   document.getElementById('f-name-label').textContent='Name';
   document.getElementById('deleteBtn').style.display=kind==='edit'?'block':'none';
   document.getElementById('saveBtn').textContent=kind==='edit'?'Save':'Add';
@@ -1843,6 +1945,8 @@ function openPanelSheet(id){
   document.getElementById('suppFields').style.display='none';
   document.getElementById('eventFields').style.display='none';
   document.getElementById('panelFields').style.display='block';
+  document.getElementById('eatFields').style.display='none';
+  document.getElementById('f-name-field').style.display='block';
   document.getElementById('deleteBtn').style.display='none';
   document.getElementById('saveBtn').textContent='Save';
   document.getElementById('sheetTitle').textContent='Edit panel';
@@ -1850,6 +1954,23 @@ function openPanelSheet(id){
   document.getElementById('f-name-label').textContent='Label';
   document.getElementById('f-name').value=p.label||'';
   document.getElementById('p-date').value=p.date||'';
+  document.getElementById('overlay').classList.add('open');
+}
+
+function openEatSheet(){
+  sheetType='eat'; editing=null;
+  document.getElementById('routineFields').style.display='none';
+  document.getElementById('suppFields').style.display='none';
+  document.getElementById('eventFields').style.display='none';
+  document.getElementById('panelFields').style.display='none';
+  document.getElementById('eatFields').style.display='block';
+  document.getElementById('f-name-field').style.display='none';
+  document.getElementById('deleteBtn').style.display='none';
+  document.getElementById('saveBtn').textContent='Save';
+  document.getElementById('sheetTitle').textContent='Eating window';
+  document.getElementById('sheetHint').textContent='Set when your eating window starts and how long it lasts.';
+  document.getElementById('eat-start-in').value=hoursToHHMM(EAT_START);
+  document.getElementById('eat-dur-in').value=EAT_END-EAT_START;
   document.getElementById('overlay').classList.add('open');
 }
 
@@ -1861,6 +1982,16 @@ function saveItem(){
       const dv=document.getElementById('p-date').value;
       if(dv) p.date=dv;
       PANELS.sort((a,b)=>a.date.localeCompare(b.date));
+    }
+    closeSheet(); render(); return;
+  }
+  if(sheetType==='eat'){
+    const t=document.getElementById('eat-start-in').value;
+    const dur=parseFloat(document.getElementById('eat-dur-in').value);
+    if(t && isFinite(dur) && dur>0){
+      const [h,m]=t.split(':').map(Number);
+      EAT_START=h+m/60;
+      EAT_END=Math.min(24,EAT_START+dur);
     }
     closeSheet(); render(); return;
   }
