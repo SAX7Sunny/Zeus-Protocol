@@ -4,7 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- "black", not "black-translucent": translucent makes iOS lay the app out
+     underneath the status bar, so the header's top was hidden behind the
+     clock. With "black" iOS reserves that strip itself. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
@@ -33,13 +36,10 @@
     padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
     max-width:640px; margin:0 auto; min-height:100vh; }
 
-  /* The fixed header is out of flow, so body's safe-area padding no longer
-     clears the notch for it — it carries its own inset instead. The max()
-     floor matters because env(safe-area-inset-top) resolves to 0 in Safari
-     (where the browser chrome sits above), but to ~47-59px only when run as
-     a standalone home-screen app — without the floor the title is clipped
-     under the status bar in one of the two modes. */
-  header { padding:max(52px, calc(18px + env(safe-area-inset-top))) 20px 0; border-bottom:1px solid var(--line);
+  /* The fixed header is out of flow, so body's safe-area padding does not
+     apply to it — it carries its own inset. The inset is 0 now that the
+     status bar is opaque ("black"), and the 24px is plain breathing room. */
+  header { padding:calc(24px + env(safe-area-inset-top)) 20px 0; border-bottom:1px solid var(--line);
     position:fixed; top:0; left:50%; transform:translateX(-50%); width:100%; max-width:640px;
     background:var(--bg); z-index:10; }
 
