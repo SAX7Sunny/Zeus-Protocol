@@ -69,8 +69,18 @@
   .progress-track { height:6px; background:rgba(236,231,214,.10); border-radius:4px; overflow:hidden; }
   .progress-bar { height:100%; width:0%; background:var(--moss); border-radius:4px; transition:width .4s ease; }
 
-  .tabs { display:flex; gap:0; margin-top:14px; width:100%; }
-  .tab { flex:1 1 0; min-width:0; padding:13px 1px; font-size:12.5px; font-weight:700;
+  /* Six tabs no longer fit at a readable size, so the bar scrolls sideways
+     rather than shrinking the labels. The fade lives on the wrapper, not the
+     scroller, so it stays pinned to the right edge instead of scrolling away. */
+  .tabs-wrap { position:relative; margin-top:14px; }
+  .tabs-wrap::after { content:''; position:absolute; right:0; top:0; bottom:0; width:34px;
+    background:linear-gradient(to right,transparent,var(--bg)); pointer-events:none;
+    opacity:1; transition:opacity .2s; }
+  .tabs-wrap.at-end::after { opacity:0; }
+  .tabs { display:flex; gap:0; width:100%; overflow-x:auto; flex-wrap:nowrap;
+    scroll-snap-type:x proximity; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+  .tabs::-webkit-scrollbar { display:none; }
+  .tab { flex:0 0 auto; scroll-snap-align:center; padding:13px 14px; font-size:12.5px; font-weight:700;
     background:none; border:none; color:var(--faint); border-bottom:2.5px solid transparent;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-0.01em; }
   .tab.active { color:var(--ink); border-bottom-color:var(--frost); }
@@ -83,6 +93,10 @@
 
   main { padding:4px 14px 96px; }   /* bottom clears the floating + button */
   .tab-actions { display:flex; gap:8px; flex-wrap:wrap; padding:2px 6px 12px; }
+  .task-when { font-size:12px; color:var(--frost); margin-top:3px; }
+  .task-when.overdue { color:var(--rose); }
+  .tasks-done-head { cursor:pointer; }
+  .tag.task { color:var(--amber); }
 
   .row { display:flex; align-items:center; gap:11px; padding:14px 6px; border-bottom:1px solid var(--line); }
   .check { flex-shrink:0; width:26px; height:26px; border-radius:50%;
@@ -132,6 +146,21 @@
   .agenda-time { flex-shrink:0; width:52px; font-size:13px; font-weight:700; color:var(--frost); }
   .day-sep { font-family:Georgia,serif; font-size:13px; color:var(--muted);
     padding:16px 6px 6px; letter-spacing:.04em; text-transform:uppercase; }
+
+  /* Undo toast — sits above the floating + button, not under it. */
+  .undo-toast { position:fixed; left:50%; transform:translateX(-50%);
+    bottom:calc(92px + env(safe-area-inset-bottom)); width:calc(100% - 28px); max-width:612px;
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    padding:12px 14px; display:none; align-items:center; gap:12px; z-index:30;
+    box-shadow:0 6px 20px rgba(0,0,0,.4); overflow:hidden; }
+  .undo-toast.show { display:flex; }
+  .undo-label { flex:1; min-width:0; font-size:13px; color:var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .undo-btn { flex-shrink:0; background:none; border:none; color:var(--frost);
+    font-size:13.5px; font-weight:700; padding:4px 6px; }
+  .undo-bar { position:absolute; left:0; bottom:0; height:2px; background:var(--amber);
+    animation:undo-drain 5s linear forwards; }
+  @keyframes undo-drain { from { width:100%; } to { width:0; } }
 
   .btn-primary,.btn-ghost { flex:1; padding:14px 8px; border-radius:12px; font-size:14.5px; font-weight:600; border:none; }
   .btn-primary { background:var(--ink); color:var(--bg); }
@@ -399,12 +428,15 @@
     <div class="progress-track"><div class="progress-bar" id="bar"></div></div>
   </div>
   <div class="eatbar" id="eatbar" onclick="openEatSheet()"></div>
-  <div class="tabs">
-    <button class="tab active" id="tab-agenda" onclick="setTab('agenda')">Agenda</button>
-    <button class="tab" id="tab-routine" onclick="setTab('routine')">Routine</button>
-    <button class="tab" id="tab-supps" onclick="setTab('supps')">Supps</button>
-    <button class="tab" id="tab-cal" onclick="setTab('cal')">Calendar</button>
-    <button class="tab" id="tab-bio" onclick="setTab('bio')">Bio</button>
+  <div class="tabs-wrap" id="tabsWrap">
+    <div class="tabs" id="tabs">
+      <button class="tab active" id="tab-agenda" onclick="setTab('agenda')">Agenda</button>
+      <button class="tab" id="tab-routine" onclick="setTab('routine')">Routine</button>
+      <button class="tab" id="tab-supps" onclick="setTab('supps')">Supps</button>
+      <button class="tab" id="tab-tasks" onclick="setTab('tasks')">Tasks</button>
+      <button class="tab" id="tab-cal" onclick="setTab('cal')">Calendar</button>
+      <button class="tab" id="tab-bio" onclick="setTab('bio')">Bio</button>
+    </div>
   </div>
 </header>
 
@@ -415,6 +447,7 @@
 <input type="file" id="backupInput" accept=".json" style="display:none">
 
 <button class="fab" onclick="openSheet('add')" aria-label="Add">+</button>
+<div class="undo-toast" id="undoToast"></div>
 
 <div class="overlay" id="overlay">
   <div class="sheet">
@@ -471,6 +504,20 @@
 
     <div id="panelFields" style="display:none">
       <div class="field"><label>Date</label><input id="p-date" type="date"></div>
+    </div>
+
+    <div id="taskFields" style="display:none">
+      <label class="seclabel">Schedule</label>
+      <div class="seg">
+        <button id="tseg-none" onclick="setTMode('none')">No date</button>
+        <button id="tseg-date" onclick="setTMode('date')">Date</button>
+      </div>
+      <div id="tDateBox" style="display:none">
+        <div class="row2">
+          <div class="field"><label>Date</label><input id="t-date" type="date"></div>
+          <div class="field"><label>Time · optional</label><input id="t-time" type="time"></div>
+        </div>
+      </div>
     </div>
 
     <div id="eatFields" style="display:none">
@@ -547,6 +594,7 @@ let calSubOpen=false;   // manual override; the card is always shown when SUBS i
 let calDataOpen=false;  // backup/export/import section, collapsed by default
 const CAL_COLORS=['#6fc4d8','#88a4dd','#9688dd','#c188dd','#dd88cf','#dd88a4',
                   '#dd9688','#ddc188','#cfdd88','#a4dd88','#88dd96','#88ddc1'];
+const TASK_COLOR='#d4bd6e';   // mirrors --amber, for inline styles hexA() has to compute on
 function eventColor(e){
   if(e.src==='sub'){ const s=SUBS.find(x=>x.id===e.subId); return s?s.color:'#6fc4d8'; }
   return '#6fc4d8';
@@ -621,6 +669,9 @@ function subRemoveCalendar(id){
 }
 
 let IMPORTED=[];           // {id,title,start:Date,dur,allDay,rrule,src:'ics'|'manual'}
+// {id,title,done,doneAt,date:'YYYY-MM-DD'|null,time:'HH:MM'|null,createdAt}
+// No defaults — the list starts empty and is entirely the user's.
+let TASKS=[];
 let importInfo='';
 /* ---------- LOCAL PERSISTENCE ----------
    Saves to this device's browser storage. Sandboxed previews block it,
@@ -635,7 +686,7 @@ function backupData(){
     IMPORTED: IMPORTED.map(e=>({...e,start:e.start.toISOString()})),
     SUBS: SUBS.map(s=>({id:s.id,url:s.url,name:s.name,color:s.color,status:s.status,msg:s.msg,
       last:s.last?new Date(s.last).toISOString():null})),
-    SUB_PROXY, SUB_MINUTES, EAT_START, EAT_END
+    SUB_PROXY, SUB_MINUTES, EAT_START, EAT_END, TASKS
   };
 }
 function saveAll(){
@@ -666,6 +717,7 @@ function applyBackup(d){
   state=d.state||{}; suppState=d.suppState||{}; optOn=d.optOn||{};
   IMPORTED=(d.IMPORTED||[]).map(e=>({...e,start:new Date(e.start)}));
   PANELS=(d.PANELS||[]).map(migratePanel);
+  TASKS=Array.isArray(d.TASKS)?d.TASKS:[];
   if(Array.isArray(d.SUBS)){
     SUBS=d.SUBS.map(s=>({...s,last:s.last?new Date(s.last):null,events:[]}));
   }else if(d.SUB_URL){
@@ -1022,6 +1074,47 @@ const streakPill=r=>{
 function toggleOpt(id){ const m=optMarks(); m[id]=!m[id]; if(!m[id]) delete marks(state)[id]; render(); }
 const hhmm=d=>pad(d.getHours())+':'+pad(d.getMinutes());
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* ---------- UNDO ----------
+   One mechanism for every single-item deletion, so no tab owns its own
+   timer. The removal happens immediately; restoreFn puts the item back at
+   the index it came from. A second deletion commits the pending one first
+   — only ever one undo in flight. */
+const UNDO_MS=5000;
+let undoPending=null;   // {restoreFn, timer}
+
+function deleteWithUndo(label,removeFn,restoreFn){
+  commitUndo();
+  removeFn();
+  undoPending={restoreFn,timer:setTimeout(commitUndo,UNDO_MS)};
+  const t=document.getElementById('undoToast');
+  if(t){
+    t.innerHTML=`<span class="undo-label">${esc(label)} deleted</span>
+      <button class="undo-btn" onclick="performUndo()">Undo</button>
+      <div class="undo-bar"></div>`;
+    t.classList.add('show');
+  }
+  render();
+}
+function hideUndoToast(){
+  const t=document.getElementById('undoToast');
+  if(t){ t.classList.remove('show'); t.innerHTML=''; }   // clearing restarts the drain animation next time
+}
+function commitUndo(){
+  if(!undoPending) return;
+  clearTimeout(undoPending.timer);
+  undoPending=null;
+  hideUndoToast();
+}
+function performUndo(){
+  if(!undoPending) return;
+  const restore=undoPending.restoreFn;
+  clearTimeout(undoPending.timer);
+  undoPending=null;
+  hideUndoToast();
+  restore();
+  render();
+}
 function hexA(hex,a){
   const h=hex.replace('#',''), r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16);
   return `rgba(${r},${g},${b},${a})`;
@@ -1164,6 +1257,10 @@ function agendaOn(d){
   routinesOn(d).forEach(r=>out.push({t:r.time,kind:'routine',ref:r}));
   SUPP_BLOCKS.filter(b=>b.items.length).forEach(b=>out.push({t:b.time,kind:'supp',ref:b}));
   eventsOn(d).forEach(e=>out.push({t:e.allDay?'00:00':hhmm(e.start),kind:'event',ref:e,allDay:e.allDay}));
+  // Only dated tasks reach the agenda; undated ones live in the Tasks tab.
+  // Untimed ones sort to the top of the day via the '00:00' key.
+  visibleTasks().filter(t=>t.date===key(d))
+    .forEach(t=>out.push({t:t.time||'00:00',kind:'task',ref:t,allDay:!t.time}));
   return out.sort((a,b)=>a.t.localeCompare(b.t));
 }
 
@@ -1197,16 +1294,29 @@ function renderDate(){
 function shiftDay(n){ viewDate.setDate(viewDate.getDate()+n); render(); }
 function goToday(){ viewDate=new Date(); viewDate.setHours(0,0,0,0); render(); }
 
+function syncTabFade(){
+  const w=document.getElementById('tabsWrap'), t=document.getElementById('tabs');
+  if(!w||!t) return;
+  w.classList.toggle('at-end', t.scrollLeft+t.clientWidth >= t.scrollWidth-2);
+}
+
 function setTab(t){
   if(t==='cal' && calMode==='day') calMode='week';   // tapping Calendar out of day view goes to the default week view, like Back
   activeTab=t; activeFilter='all';
-  ['agenda','routine','supps','cal','bio'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===t));
+  ['agenda','routine','supps','tasks','cal','bio'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===t));
   document.getElementById('pageTitle').textContent =
-    t==='agenda'?'Agenda':t==='routine'?'Daily Routine':t==='supps'?'Supplements':t==='cal'?'Calendar':'Bio Analysis';
-  document.getElementById('progWrap').style.display = (t==='cal'||t==='bio')?'none':'block';
-  document.querySelector('.daynav').style.display = (t==='cal'||t==='bio')?'none':'flex';
+    t==='agenda'?'Agenda':t==='routine'?'Daily Routine':t==='supps'?'Supplements':
+    t==='tasks'?'Tasks':t==='cal'?'Calendar':'Bio Analysis';
+  // Tasks are not day-scoped and deliberately excluded from the daily
+  // percentage, so it hides the day nav and progress bar like cal/bio do.
+  const chromeless = (t==='cal'||t==='bio'||t==='tasks');
+  document.getElementById('progWrap').style.display = chromeless?'none':'block';
+  document.querySelector('.daynav').style.display = chromeless?'none':'flex';
   document.querySelector('.fab').style.display = t==='bio'?'none':'block';
   window.scrollTo(0,0);
+  const btn=document.getElementById('tab-'+t);
+  if(btn&&btn.scrollIntoView) btn.scrollIntoView({inline:'center',block:'nearest'});
+  syncTabFade();
   render();
 }
 
@@ -1237,6 +1347,7 @@ function render(){
   if(activeTab==='agenda') renderAgenda(c);
   else if(activeTab==='routine') renderRoutine(c);
   else if(activeTab==='supps') renderSupps(c);
+  else if(activeTab==='tasks') renderTasks(c);
   else if(activeTab==='cal') renderCalendar(c);
   else renderBio(c);
   renderProgress(); renderEatWindow(); saveAll();
@@ -1275,7 +1386,8 @@ function renderRoutine(c){
   c.querySelectorAll('[data-edit]').forEach(x=>x.onclick=()=>openSheet('edit',x.dataset.edit));
   c.querySelectorAll('[data-del]').forEach(x=>x.onclick=()=>{
     const r=ROUTINES.find(y=>y.id===x.dataset.del);
-    if(confirm('Delete "'+r.title+'"?')){ ROUTINES.splice(ROUTINES.indexOf(r),1); render(); }
+    const i=ROUTINES.indexOf(r);
+    deleteWithUndo(r.title, ()=>ROUTINES.splice(i,1), ()=>ROUTINES.splice(i,0,r));
   });
 }
 
@@ -1308,13 +1420,101 @@ function renderSupps(c){
   c.querySelectorAll('[data-sdel]').forEach(x=>x.onclick=()=>{
     const [bid,iid]=x.dataset.sdel.split(':');
     const b=SUPP_BLOCKS.find(y=>y.id===bid); const it=b.items.find(y=>y.id===iid);
-    if(confirm('Delete "'+it.name+'"?')){ b.items.splice(b.items.indexOf(it),1); render(); }
+    const i=b.items.indexOf(it);
+    deleteWithUndo(it.name, ()=>b.items.splice(i,1), ()=>b.items.splice(i,0,it));
   });
   c.querySelectorAll('[data-btime]').forEach(b=>b.onclick=()=>{
     const bl=SUPP_BLOCKS.find(x=>x.id===b.dataset.btime);
     const v=prompt('Time for "'+bl.title+'" (HH:MM)',bl.time);
     if(v&&/^\d{1,2}:\d{2}$/.test(v)){ bl.time=v.length===4?'0'+v:v; render(); }
   });
+}
+
+/* ---------- TASKS ----------
+   Completion replaces deletion: a ticked task stays visible for the rest of
+   that day, then drops out of every view while staying in storage. */
+let tasksDoneOpen=false;
+
+const visibleTasks=()=>TASKS.filter(t=>!t.done || t.doneAt===key(new Date()));
+
+function taskDateLabel(t){
+  if(!t.date) return '';
+  const [y,m,d]=t.date.split('-').map(Number);
+  const dt=new Date(y,m-1,d); dt.setHours(0,0,0,0);
+  const today=new Date(); today.setHours(0,0,0,0);
+  const diff=Math.round((dt-today)/86400000);
+  const base = diff===0?'Today' : diff===1?'Tomorrow'
+    : dt.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  return base+(t.time?' · '+t.time:'');
+}
+const taskOverdue=t=>!!t.date && !t.done && t.date<key(new Date());
+
+function toggleTask(id){
+  const t=TASKS.find(x=>x.id===id); if(!t) return;
+  t.done=!t.done;
+  t.doneAt=t.done?key(new Date()):null;
+  render();
+}
+function deleteTask(id){
+  const i=TASKS.findIndex(t=>t.id===id); if(i<0) return;
+  const t=TASKS[i];
+  deleteWithUndo(t.title, ()=>TASKS.splice(i,1), ()=>TASKS.splice(i,0,t));
+}
+function clearCompleted(){
+  const todayKey=key(new Date());
+  const n=TASKS.filter(t=>t.done&&t.doneAt===todayKey).length;
+  if(!n) return;
+  if(!confirm('Clear '+n+' completed task'+(n===1?'':'s')+'? This cannot be undone.')) return;
+  TASKS=TASKS.filter(t=>!(t.done&&t.doneAt===todayKey));
+  render();
+}
+
+function taskRow(t){
+  const row=document.createElement('div');
+  row.className='row'+(t.done?' done':'');
+  const when=t.date?`<div class="task-when${taskOverdue(t)?' overdue':''}">${esc(taskDateLabel(t))}</div>`:'';
+  row.innerHTML=`<div class="check ${t.done?'on':''}" data-task="${t.id}"></div>
+    <div class="rbody"><div class="rtitle">${esc(t.title)}</div>${when}</div>
+    <div class="acts"><button class="ico edit" data-tedit="${t.id}">✎</button>
+      <button class="ico del" data-tdel="${t.id}">✕</button></div>`;
+  return row;
+}
+function bindTaskRows(c){
+  c.querySelectorAll('[data-task]').forEach(x=>x.onclick=()=>toggleTask(x.dataset.task));
+  c.querySelectorAll('[data-tedit]').forEach(x=>x.onclick=()=>openTaskSheet(x.dataset.tedit));
+  c.querySelectorAll('[data-tdel]').forEach(x=>x.onclick=()=>deleteTask(x.dataset.tdel));
+}
+
+function renderTasks(c){
+  const vis=visibleTasks(), todayKey=key(new Date());
+  const scheduled=vis.filter(t=>!t.done&&t.date)
+    .sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'99:99').localeCompare(b.time||'99:99'));
+  const someday=vis.filter(t=>!t.done&&!t.date);
+  const done=vis.filter(t=>t.done&&t.doneAt===todayKey);
+
+  if(done.length) c.insertAdjacentHTML('beforeend',
+    `<div class="tab-actions"><button class="opt-pill off" onclick="clearCompleted()">Clear completed</button></div>`);
+
+  if(!scheduled.length&&!someday.length&&!done.length){
+    c.insertAdjacentHTML('beforeend','<div class="empty">No tasks yet.<br>Tap + to add one.</div>');
+    return;
+  }
+  if(scheduled.length){
+    c.insertAdjacentHTML('beforeend','<div class="day-sep">Scheduled</div>');
+    scheduled.forEach(t=>c.appendChild(taskRow(t)));
+  }
+  if(someday.length){
+    c.insertAdjacentHTML('beforeend','<div class="day-sep">Someday</div>');
+    someday.forEach(t=>c.appendChild(taskRow(t)));
+  }
+  if(done.length){
+    c.insertAdjacentHTML('beforeend',
+      `<div class="day-sep tasks-done-head" id="tasksDoneHead">Done (${done.length}) ${tasksDoneOpen?'▾':'▸'}</div>`);
+    if(tasksDoneOpen) done.forEach(t=>c.appendChild(taskRow(t)));
+    const h=document.getElementById('tasksDoneHead');
+    if(h) h.onclick=()=>{ tasksDoneOpen=!tasksDoneOpen; render(); };
+  }
+  bindTaskRows(c);
 }
 
 function renderAgenda(c){
@@ -1351,6 +1551,14 @@ function renderAgenda(c){
         <div class="rbody"><div class="rtitle">Supplements · ${esc(b.title)}</div>
           <div class="ag-sub">${esc(b.items.map(i=>i.name).join(', '))}</div></div>
         <div class="acts"><button class="ico edit" data-goblk="1">✎</button></div>`;
+    } else if(a.kind==='task'){
+      const t=a.ref;
+      row.className='row'+(t.done?' done':'');
+      row.innerHTML=`<span class="ag-time">${a.allDay?'all<small>day</small>':a.t}</span>
+        <div class="check ${t.done?'on':''}" data-task="${t.id}"></div>
+        <div class="rbody"><div class="rtitle">${esc(t.title)}</div>
+          <div class="rmeta"><span class="tag task">Task</span></div></div>
+        <div class="acts"><button class="ico edit" data-tedit="${t.id}">✎</button></div>`;
     } else {
       const e=a.ref, done=!!mr['ev:'+e.id];
       row.className='row'+(done?' done':'');
@@ -1380,11 +1588,14 @@ function renderAgenda(c){
   c.querySelectorAll('[data-edit]').forEach(x=>x.onclick=()=>{ activeTab='routine'; openSheet('edit',x.dataset.edit); activeTab='agenda'; });
   c.querySelectorAll('[data-goblk]').forEach(x=>x.onclick=()=>setTab('supps'));
   c.querySelectorAll('[data-edel]').forEach(b=>b.onclick=()=>deleteEventById(b.dataset.edel));
+  bindTaskRows(c);
 }
 
 function deleteEventById(id){
   const i=IMPORTED.findIndex(e=>e.id===id);
-  if(i>-1&&confirm('Remove "'+IMPORTED[i].title+'" from this app?')){ IMPORTED.splice(i,1); render(); }
+  if(i<0) return;
+  const ev=IMPORTED[i];
+  deleteWithUndo(ev.title, ()=>IMPORTED.splice(i,1), ()=>IMPORTED.splice(i,0,ev));
 }
 
 /* ---------- MONTH VIEW ---------- */
@@ -1612,6 +1823,9 @@ function renderDayView(c){
   const evs=eventsOn(viewDate);
   const allDayItems=evs.filter(e=>e.allDay);
   const timedItems=evs.filter(e=>!e.allDay);
+  const dayTasks=visibleTasks().filter(t=>t.date===key(viewDate));
+  const untimedTasks=dayTasks.filter(t=>!t.time);
+  const timedTasks=dayTasks.filter(t=>t.time);
   const isToday=sameDay(viewDate,new Date());
 
   c.insertAdjacentHTML('beforeend',`
@@ -1621,18 +1835,27 @@ function renderDayView(c){
       <div class="day-arrows"><button onclick="shiftDay(-1)">‹</button><button onclick="shiftDay(1)">›</button></div>
     </div>`);
 
-  if(allDayItems.length){
+  if(allDayItems.length||untimedTasks.length){
     const rows=allDayItems.map(e=>{
       const color=eventColor(e);
       return `<div class="day-allday" style="border-left-color:${color};background:${hexA(color,0.16)}">${esc(e.title)}</div>`;
-    }).join('');
+    }).concat(untimedTasks.map(t=>
+      `<div class="day-allday" style="border-left-color:${TASK_COLOR};background:${hexA(TASK_COLOR,0.16)}"
+        onclick="openTaskSheet('${t.id}')">${esc(t.title)}</div>`
+    )).join('');
     c.insertAdjacentHTML('beforeend',`<div class="day-allday-strip">${rows}</div>`);
   }
 
   const entries=timedItems.map(e=>{
     const start=e.start.getHours()*60+e.start.getMinutes();
-    return {start,end:start+Math.max(e.dur,1),dur:e.dur,title:e.title,color:eventColor(e)};
-  });
+    return {start,end:start+Math.max(e.dur,1),dur:e.dur,title:e.title,color:eventColor(e),tap:''};
+  }).concat(timedTasks.map(t=>{
+    // Tasks carry no duration, so give them a nominal 30-minute block.
+    const [h,m]=t.time.split(':').map(Number);
+    const start=h*60+m;
+    return {start,end:start+30,dur:30,title:t.title,color:TASK_COLOR,
+      tap:`onclick="openTaskSheet('${t.id}')"`};
+  }));
   layoutDay(entries);
 
   const blocksHTML=entries.map(en=>{
@@ -1642,7 +1865,7 @@ function renderDayView(c){
     const timeLbl=`${pad(Math.floor(en.start/60)%24)}:${pad(en.start%60)}–${pad(Math.floor(endMin/60)%24)}:${pad(endMin%60)}`;
     return `<div class="day-block" style="top:${top}px;height:${height}px;
       left:calc(${leftPct}% + 2px);width:calc(${widthPct}% - 4px);
-      border-left-color:${en.color};background:${hexA(en.color,0.16)}">
+      border-left-color:${en.color};background:${hexA(en.color,0.16)};cursor:${en.tap?'pointer':'default'}" ${en.tap||''}>
       <div class="db-title">${esc(en.title)}</div><div class="db-time">${timeLbl}</div>
     </div>`;
   }).join('');
@@ -1966,7 +2189,35 @@ function sheetTypeFor(kind,ref){
   return (activeTab==='agenda'||activeTab==='cal') ? 'event' : 'routine';
 }
 
+let tMode='none';
+function setTMode(m){
+  tMode=m;
+  document.getElementById('tseg-none').classList.toggle('on',m==='none');
+  document.getElementById('tseg-date').classList.toggle('on',m==='date');
+  document.getElementById('tDateBox').style.display=m==='date'?'block':'none';
+}
+function openTaskSheet(id){
+  sheetType='task'; editing=id||null;
+  ['routineFields','suppFields','eventFields','panelFields','eatFields']
+    .forEach(x=>document.getElementById(x).style.display='none');
+  document.getElementById('taskFields').style.display='block';
+  document.getElementById('f-name-field').style.display='block';
+  document.getElementById('f-name-label').textContent='Name';
+  document.getElementById('deleteBtn').style.display=id?'block':'none';
+  document.getElementById('saveBtn').textContent=id?'Save':'Add';
+  document.getElementById('sheetTitle').textContent=(id?'Edit ':'Add ')+'task';
+  document.getElementById('sheetHint').textContent =
+    id ? 'Change any detail below.' : 'Give it a date only if it has to happen on one.';
+  const t=id?TASKS.find(x=>x.id===id):null;
+  document.getElementById('f-name').value=t?t.title:'';
+  document.getElementById('t-date').value=(t&&t.date)?t.date:dk();
+  document.getElementById('t-time').value=(t&&t.time)?t.time:'';
+  setTMode(t&&t.date?'date':'none');
+  document.getElementById('overlay').classList.add('open');
+}
+
 function openSheet(kind,ref){
+  if(activeTab==='tasks'){ openTaskSheet(kind==='edit'?ref:null); return; }
   sheetType=sheetTypeFor(kind,ref);
   editing=kind==='edit'?ref:null;
   document.getElementById('routineFields').style.display=sheetType==='routine'?'block':'none';
@@ -1974,6 +2225,7 @@ function openSheet(kind,ref){
   document.getElementById('eventFields').style.display=sheetType==='event'?'block':'none';
   document.getElementById('panelFields').style.display='none';
   document.getElementById('eatFields').style.display='none';
+  document.getElementById('taskFields').style.display='none';
   document.getElementById('f-name-field').style.display='block';
   document.getElementById('f-name-label').textContent='Name';
   document.getElementById('deleteBtn').style.display=kind==='edit'?'block':'none';
@@ -2037,6 +2289,7 @@ function openPanelSheet(id){
   document.getElementById('eventFields').style.display='none';
   document.getElementById('panelFields').style.display='block';
   document.getElementById('eatFields').style.display='none';
+  document.getElementById('taskFields').style.display='none';
   document.getElementById('f-name-field').style.display='block';
   document.getElementById('deleteBtn').style.display='none';
   document.getElementById('saveBtn').textContent='Save';
@@ -2054,6 +2307,7 @@ function openEatSheet(){
   document.getElementById('suppFields').style.display='none';
   document.getElementById('eventFields').style.display='none';
   document.getElementById('panelFields').style.display='none';
+  document.getElementById('taskFields').style.display='none';
   document.getElementById('eatFields').style.display='block';
   document.getElementById('f-name-field').style.display='none';
   document.getElementById('deleteBtn').style.display='none';
@@ -2073,6 +2327,20 @@ function saveItem(){
       const dv=document.getElementById('p-date').value;
       if(dv) p.date=dv;
       PANELS.sort((a,b)=>a.date.localeCompare(b.date));
+    }
+    closeSheet(); render(); return;
+  }
+  if(sheetType==='task'){
+    const name=document.getElementById('f-name').value.trim();
+    if(!name){ document.getElementById('f-name').focus(); return; }
+    const date=tMode==='date'?(document.getElementById('t-date').value||dk()):null;
+    const time=tMode==='date'?(document.getElementById('t-time').value||null):null;
+    if(editing){
+      const t=TASKS.find(x=>x.id===editing);
+      if(t){ t.title=name; t.date=date; t.time=time; }
+    } else {
+      TASKS.push({id:'t'+Date.now(),title:name,done:false,doneAt:null,
+        date,time,createdAt:new Date().toISOString()});
     }
     closeSheet(); render(); return;
   }
@@ -2134,13 +2402,22 @@ function saveItem(){
 }
 function deleteCurrent(){
   if(!editing) return;
+  const id=editing;
+  closeSheet();                       // closeSheet clears `editing`, so capture it first
   if(sheetType==='supp'){
-    const [bid,iid]=editing.split(':'); const b=SUPP_BLOCKS.find(x=>x.id===bid);
-    const i=b.items.findIndex(x=>x.id===iid); if(i>-1) b.items.splice(i,1);
+    const [bid,iid]=id.split(':'); const b=SUPP_BLOCKS.find(x=>x.id===bid); if(!b) return;
+    const i=b.items.findIndex(x=>x.id===iid); if(i<0) return;
+    const it=b.items[i];
+    deleteWithUndo(it.name, ()=>b.items.splice(i,1), ()=>b.items.splice(i,0,it));
+  } else if(sheetType==='task'){
+    const i=TASKS.findIndex(t=>t.id===id); if(i<0) return;
+    const t=TASKS[i];
+    deleteWithUndo(t.title, ()=>TASKS.splice(i,1), ()=>TASKS.splice(i,0,t));
   } else {
-    const i=ROUTINES.findIndex(r=>r.id===editing); if(i>-1) ROUTINES.splice(i,1);
+    const i=ROUTINES.findIndex(r=>r.id===id); if(i<0) return;
+    const r=ROUTINES[i];
+    deleteWithUndo(r.title, ()=>ROUTINES.splice(i,1), ()=>ROUTINES.splice(i,0,r));
   }
-  closeSheet(); render();
 }
 document.getElementById('overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeSheet(); });
 
@@ -2182,6 +2459,9 @@ function exportEverything(){
 
 loadAll();
 render();
+document.getElementById('tabs').addEventListener('scroll',syncTabFade,{passive:true});
+window.addEventListener('resize',syncTabFade);
+syncTabFade();
 setInterval(()=>{ renderEatWindow(); updateNowLine(); },60000);
 if(SUBS.length){ startSubTimer(); subFetchAll(true); }
 </script>
