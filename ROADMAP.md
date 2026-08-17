@@ -9,6 +9,11 @@ CORS proxy. Biomarkers parsed from lab PDFs, stored locally.
 Open before phase 5: JSON backup export, biomarker parser rewrite (92 vs 9
 values), calendar colour picker, day view.
 
+**Phase 6** exists as a later option, not a commitment: packaging the web app
+properly, from PWA polish up to a native shell. Only 6.1 is a given; anything
+beyond it depends on whether native Apple Health access turns out to be worth
+its cost.
+
 ---
 
 ## Phase 5 — backend, accounts, integrations
@@ -68,6 +73,51 @@ Bio tab can read them without caring where they came from.
 - Defaults: new accounts start from `DEFAULT_ROUTINES` / `DEFAULT_SUPPS`, then
   diverge freely. The existing `seenDefaults` merge logic already handles
   shipping new defaults without overwriting user edits.
+
+---
+
+## Phase 6 — packaging as a real app
+
+Three routes, cheapest first. Not urgent: the web app already works from the
+home screen.
+
+### 6.1 PWA polish — do this regardless
+
+A `manifest.json` plus a service worker. Gives offline operation, a proper
+splash screen and a native-feeling launch. Costs nothing, needs no App Store,
+and barely touches the existing file. It is also the foundation the other two
+routes build on.
+
+Limits: no HealthKit, no background sync, notifications only partially
+supported on iOS.
+
+### 6.2 Capacitor — the realistic candidate
+
+A native shell around the existing web app. HTML, CSS and JavaScript stay as
+they are, but native APIs become reachable — **including HealthKit**, which is
+the one thing the Shortcuts workaround in 5.3 only approximates.
+
+Costs: Xcode on the Mac mini, Apple Developer Program at €99/year, and App
+Store review, which is stricter for health apps. The "one file, no build step"
+constraint in `CLAUDE.md` no longer holds — Capacitor requires a project
+structure. That trade-off should be a deliberate decision, not a side effect.
+
+### 6.3 Native rewrite — not worth it
+
+Swift or React Native. Best performance, but starts from zero and discards
+everything built so far. Recorded only for completeness.
+
+### Decision point
+
+Whether to go beyond 6.1 hinges on one question: **is native Apple Health
+access worth €99/year and losing the single-file architecture?** If the
+Shortcuts route from 5.3 proves good enough in daily use, stop at the PWA. If
+it turns out to be too much friction — especially once other people have to
+install a Shortcut of their own — Capacitor becomes the answer.
+
+A second, non-technical argument: distributing through the App Store reaches
+people who will not save a URL to their home screen. That matters only once
+there are real users.
 
 ---
 
