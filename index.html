@@ -1163,6 +1163,7 @@ function shiftDay(n){ viewDate.setDate(viewDate.getDate()+n); render(); }
 function goToday(){ viewDate=new Date(); viewDate.setHours(0,0,0,0); render(); }
 
 function setTab(t){
+  if(t==='cal' && calMode==='day') calMode='week';   // tapping Calendar out of day view goes to the default week view, like Back
   activeTab=t; activeFilter='all';
   ['agenda','routine','supps','cal','bio'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===t));
   document.getElementById('pageTitle').textContent =
