@@ -34,8 +34,12 @@
     max-width:640px; margin:0 auto; min-height:100vh; }
 
   /* The fixed header is out of flow, so body's safe-area padding no longer
-     clears the notch for it — it carries its own inset instead. */
-  header { padding:calc(18px + env(safe-area-inset-top)) 20px 0; border-bottom:1px solid var(--line);
+     clears the notch for it — it carries its own inset instead. The max()
+     floor matters because env(safe-area-inset-top) resolves to 0 in Safari
+     (where the browser chrome sits above), but to ~47-59px only when run as
+     a standalone home-screen app — without the floor the title is clipped
+     under the status bar in one of the two modes. */
+  header { padding:max(52px, calc(18px + env(safe-area-inset-top))) 20px 0; border-bottom:1px solid var(--line);
     position:fixed; top:0; left:50%; transform:translateX(-50%); width:100%; max-width:640px;
     background:var(--bg); z-index:10; }
 
