@@ -226,6 +226,9 @@
   .gcard { margin:10px 6px 16px; padding:16px; border-radius:14px; background:var(--surface);
     border:1px solid var(--line); }
   .gcard.on { border-color:rgba(143,206,138,.45); background:rgba(143,206,138,.07); }
+  .gcard.cal-collapsed { margin-bottom:12px; cursor:pointer; }
+  .gcard.cal-collapsed .gtop { margin-bottom:0; }
+  .cal-collapsed-meta { font-size:12.5px; color:var(--muted); font-weight:600; }
   .gtop { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
   .gdot { width:9px; height:9px; border-radius:50%; background:var(--faint); flex-shrink:0; }
   .gdot.live { background:var(--moss); box-shadow:0 0 0 4px rgba(143,206,138,.18); }
@@ -538,6 +541,7 @@ let seenDefaults=[];   // ids already reconciled against saved data
    ====================================================================== */
 let SUBS=[], SUB_PROXY='', SUB_MINUTES=15, subTimer=null;
 let colorPickerFor=null;
+let calSubOpen=false;   // manual override; the card is always shown when SUBS is empty
 const CAL_COLORS=['#6fc4d8','#88a4dd','#9688dd','#c188dd','#dd88cf','#dd88a4',
                   '#dd9688','#ddc188','#cfdd88','#a4dd88','#88dd96','#88ddc1'];
 function eventColor(e){
@@ -597,6 +601,7 @@ function subAddCalendar(){
     name:hostnameOf(url), color:CAL_COLORS[SUBS.length%CAL_COLORS.length],
     status:'loading', msg:'Fetching calendar…', last:null, events:[]};
   SUBS.push(sub);
+  calSubOpen=true;   // keep the card open through this add — it only defaults to collapsed on a fresh visit
   render();
   subFetchOne(sub,false).then(()=>{ startSubTimer(); saveAll(); render(); });
 }
@@ -1414,9 +1419,17 @@ function pickSubColor(id,color){
 }
 
 function subCardHTML(){
+  const hasSubs=SUBS.length>0;
+  if(hasSubs && !calSubOpen){
+    return `<div class="gcard cal-collapsed" onclick="calSubOpen=true;render()">
+      <div class="gtop"><span class="gtitle">Calendar subscriptions</span>
+        <span class="cal-collapsed-meta">${SUBS.length} connected ›</span></div>
+    </div>`;
+  }
   const rows=SUBS.map(subRowHTML).join('');
   return `<div class="gcard">
-    <div class="gtop"><span class="gtitle">Calendar subscriptions</span></div>
+    <div class="gtop"><span class="gtitle">Calendar subscriptions</span>
+      ${hasSubs?'<button class="ico edit" onclick="calSubOpen=false;render()" title="Hide">︿</button>':''}</div>
     <div class="gsub">Paste the secret iCal address of a Google or iCloud calendar. Read-only, refreshes on its own.<br>
       Re-checks every ${SUB_MINUTES} min. Your routines stay in this app.</div>
     <input class="gid-input" id="subProxy" value="${esc(SUB_PROXY)}" placeholder="Proxy prefix (required) — e.g. https://you.workers.dev/?url={url}" onchange="subSetProxy(this.value)">
