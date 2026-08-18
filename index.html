@@ -428,6 +428,39 @@
   .md-point b { color:var(--ink); font-weight:700; }
   .md-sub { color:var(--faint); }
 
+  /* Task detail view */
+  .td-top { display:flex; align-items:center; justify-content:space-between; padding-bottom:6px; }
+  .td-del { background:none; border:none; color:var(--rose); font-size:13px; font-weight:600; padding:0 0 14px; }
+  .td-title { width:100%; background:none; border:none; padding:0; color:var(--ink);
+    font-family:Georgia,serif; font-size:22px; font-weight:600; line-height:1.25; }
+  .td-title::placeholder { color:var(--faint); }
+  .td-sched { display:block; background:none; border:none; padding:8px 0 4px;
+    color:var(--frost); font-size:13px; font-weight:600; }
+  .td-notes { width:100%; background:none; border:none; padding:8px 0; resize:none;
+    color:var(--muted); font-size:14px; font-family:inherit; line-height:1.55; overflow:hidden; }
+  .td-notes::placeholder { color:var(--faint); }
+  .td-sep { height:1px; background:var(--line); margin:12px 0 4px; }
+  .sub-item { display:flex; align-items:center; gap:10px; padding:7px 0; background:var(--bg); }
+  /* Square, so it never reads as a task/routine checkbox */
+  .sub-check { flex-shrink:0; width:20px; height:20px; border-radius:5px;
+    border:1.5px solid var(--line); background:none; display:grid; place-items:center; }
+  .sub-check.on { background:var(--moss); border-color:var(--moss); }
+  .sub-check.on::after { content:"✓"; color:var(--bg); font-size:12px; font-weight:800; }
+  .sub-input { flex:1; min-width:0; background:none; border:none; padding:0; color:var(--ink);
+    font-size:14px; font-family:inherit; }
+  .sub-input::placeholder { color:var(--faint); }
+  .sub-item.done .sub-input { text-decoration:line-through; opacity:.45; }
+  .sub-del { flex-shrink:0; background:none; border:none; color:var(--rose); font-size:13px; padding:4px 6px; }
+  .drag-handle { flex-shrink:0; width:34px; min-height:44px; display:grid; place-items:center;
+    background:none; border:none; color:var(--faint); font-size:15px; cursor:grab;
+    touch-action:none; }
+  .drag-lift { position:relative; z-index:5; background:var(--surface); border-radius:9px;
+    box-shadow:0 8px 22px rgba(0,0,0,.45); }
+  .drag-shift { transition:transform .16s ease; }
+  .sub-count { font-size:12px; color:var(--muted); margin-left:8px; font-weight:600; }
+  .ghost { color:var(--faint); font-style:italic; }
+  .task-sec .row { background:var(--bg); }
+
   .sheet-actions { display:flex; gap:10px; margin-top:20px; }
   .link-btn { width:100%; margin-top:6px; padding:12px; border-radius:10px; background:var(--frost-soft);
     color:var(--frost); border:none; font-size:14px; font-weight:600; }
@@ -531,18 +564,30 @@
       <div class="field"><label>Date</label><input id="p-date" type="date"></div>
     </div>
 
-    <div id="taskFields" style="display:none">
-      <label class="seclabel">Schedule</label>
-      <div class="seg">
-        <button id="tseg-none" onclick="setTMode('none')">No date</button>
-        <button id="tseg-date" onclick="setTMode('date')">Date</button>
+    <div id="taskDetail" style="display:none">
+      <div class="td-top">
+        <button class="md-back" onclick="closeSheet()">‹ Back</button>
+        <button class="td-del" onclick="deleteCurrentTask()">Delete task</button>
       </div>
-      <div id="tDateBox" style="display:none">
-        <div class="row2">
-          <div class="field"><label>Date</label><input id="t-date" type="date"></div>
-          <div class="field"><label>Time · optional</label><input id="t-time" type="time"></div>
+      <input id="td-title" class="td-title" placeholder="Task name">
+      <button id="td-sched" class="td-sched" onclick="toggleSchedEditor()"></button>
+
+      <div id="taskFields" style="display:none">
+        <div class="seg">
+          <button id="tseg-none" onclick="setTMode('none')">No date</button>
+          <button id="tseg-date" onclick="setTMode('date')">Date</button>
+        </div>
+        <div id="tDateBox" style="display:none">
+          <div class="row2">
+            <div class="field"><label>Date</label><input id="t-date" type="date"></div>
+            <div class="field"><label>Time · optional</label><input id="t-time" type="time"></div>
+          </div>
         </div>
       </div>
+
+      <textarea id="td-notes" class="td-notes" placeholder="Description" rows="1"></textarea>
+      <div class="td-sep"></div>
+      <div id="td-subs"></div>
     </div>
 
     <div id="eatFields" style="display:none">
@@ -752,7 +797,14 @@ function applyBackup(d){
   state=d.state||{}; suppState=d.suppState||{}; optOn=d.optOn||{};
   IMPORTED=(d.IMPORTED||[]).map(e=>({...e,start:new Date(e.start)}));
   PANELS=(d.PANELS||[]).map(migratePanel);
-  TASKS=Array.isArray(d.TASKS)?d.TASKS:[];
+  // Tasks saved before notes/subtasks/order existed get the fields defaulted
+  // here rather than rewritten, so an older backup still loads cleanly.
+  TASKS=(Array.isArray(d.TASKS)?d.TASKS:[]).map((t,i)=>({
+    ...t,
+    notes: typeof t.notes==='string'?t.notes:'',
+    subtasks: Array.isArray(t.subtasks)?t.subtasks:[],
+    order: typeof t.order==='number'?t.order:i
+  }));
   sortPanels();
   if(Array.isArray(d.SUBS)){
     SUBS=d.SUBS.map(s=>({...s,last:s.last?new Date(s.last):null,events:[]}));
@@ -1516,6 +1568,100 @@ function renderSupps(c){
   markFirstOpenRow(c);
 }
 
+/* ---------- DRAG TO REORDER ----------
+   Pointer Events rather than HTML5 drag-and-drop, which does not work on iOS
+   Safari. Dragging starts on the handle only, so a swipe anywhere else on a
+   row still scrolls the page; on touch a short hold is required first, and
+   only once engaged do we preventDefault to stop the page moving underneath.
+   Reordering is confined to the list it starts in. */
+const DRAG_HOLD_MS=200, DRAG_EDGE=60;
+
+function scrollParentOf(el){
+  let p=el.parentElement;
+  while(p&&p!==document.body){
+    const o=getComputedStyle(p).overflowY;
+    if(o==='auto'||o==='scroll') return p;
+    p=p.parentElement;
+  }
+  return null;   // fall back to the window
+}
+
+function makeReorderable(list,onDrop){
+  if(!list) return;
+  list.querySelectorAll('[data-drag]').forEach(handle=>{
+    handle.addEventListener('pointerdown',e=>beginDrag(e,list,handle,onDrop));
+  });
+}
+
+function beginDrag(e,list,handle,onDrop){
+  if(e.button&&e.button!==0) return;
+  const item=handle.closest('[data-item]'); if(!item) return;
+  const items=[...list.querySelectorAll('[data-item]')];
+  const fromIdx=items.indexOf(item); if(fromIdx<0) return;
+  const rects=items.map(el=>el.getBoundingClientRect());
+  const h=rects[fromIdx].height;
+  const startY=e.clientY;
+  const scroller=scrollParentOf(list);
+  let engaged=false, toIdx=fromIdx, hold=null;
+
+  const engage=()=>{
+    engaged=true;
+    item.classList.add('drag-lift');
+    items.forEach(el=>{ if(el!==item) el.classList.add('drag-shift'); });
+  };
+  if(e.pointerType==='mouse') engage(); else hold=setTimeout(engage,DRAG_HOLD_MS);
+
+  try{ handle.setPointerCapture(e.pointerId); }catch(_){}
+
+  const move=ev=>{
+    if(!engaged){
+      // Moved before the hold elapsed — treat it as a scroll, not a drag.
+      if(Math.abs(ev.clientY-startY)>8){ clearTimeout(hold); finish(true); }
+      return;
+    }
+    ev.preventDefault();
+    item.style.transform=`translateY(${ev.clientY-startY}px) scale(1.02)`;
+
+    let k=0;
+    items.forEach((el,i)=>{ if(i!==fromIdx && rects[i].top+rects[i].height/2<ev.clientY) k++; });
+    toIdx=k;
+    items.forEach((el,i)=>{
+      if(i===fromIdx) return;
+      const fi = i<fromIdx ? i : i-1;
+      let shift=0;
+      if(fi<fromIdx && fi>=toIdx) shift=h;
+      else if(fi>=fromIdx && fi<toIdx) shift=-h;
+      el.style.transform=shift?`translateY(${shift}px)`:'';
+    });
+
+    const vh=window.innerHeight;
+    const top=scroller?scroller.getBoundingClientRect().top:0;
+    const bot=scroller?scroller.getBoundingClientRect().bottom:vh;
+    if(ev.clientY<top+DRAG_EDGE){ scroller?scroller.scrollBy(0,-12):window.scrollBy(0,-12); }
+    else if(ev.clientY>bot-DRAG_EDGE){ scroller?scroller.scrollBy(0,12):window.scrollBy(0,12); }
+  };
+
+  const finish=cancelled=>{
+    clearTimeout(hold);
+    document.removeEventListener('pointermove',move);
+    document.removeEventListener('pointerup',up);
+    document.removeEventListener('pointercancel',up);
+    try{ handle.releasePointerCapture(e.pointerId); }catch(_){}
+    items.forEach(el=>{ el.style.transform=''; el.classList.remove('drag-lift','drag-shift'); });
+    if(!cancelled&&engaged&&toIdx!==fromIdx){
+      const ids=items.map(el=>el.dataset.item);
+      const [moved]=ids.splice(fromIdx,1);
+      ids.splice(toIdx,0,moved);
+      onDrop(ids);            // persist once, on drop — not on every move
+    }
+  };
+  const up=()=>finish(false);
+
+  document.addEventListener('pointermove',move,{passive:false});
+  document.addEventListener('pointerup',up);
+  document.addEventListener('pointercancel',up);
+}
+
 /* ---------- TASKS ----------
    Completion replaces deletion: a ticked task stays visible for the rest of
    that day, then drops out of every view while staying in storage. */
@@ -1555,28 +1701,36 @@ function clearCompleted(){
   render();
 }
 
-function taskRow(t){
+const subCount=t=>{
+  const n=(t.subtasks||[]).length;
+  return n?`<span class="sub-count">${t.subtasks.filter(s=>s.done).length}/${n}</span>`:'';
+};
+
+function taskRow(t,draggable){
   const row=document.createElement('div');
   row.className='row'+(t.done?' done':'');
+  if(draggable) row.dataset.item=t.id;
   const when=t.date?`<div class="task-when${taskOverdue(t)?' overdue':''}">${esc(taskDateLabel(t))}</div>`:'';
   row.innerHTML=`<div class="check ${t.done?'on':''}" data-task="${t.id}"></div>
-    <div class="rbody"><div class="rtitle">${esc(t.title)}</div>${when}</div>
-    <div class="acts"><button class="ico edit" data-tedit="${t.id}">✎</button>
-      <button class="ico del" data-tdel="${t.id}">✕</button></div>`;
+    <div class="rbody" data-topen="${t.id}"><div class="rtitle">${esc(t.title)||'<span class="ghost">Untitled</span>'}${subCount(t)}</div>${when}</div>
+    ${draggable?`<button class="drag-handle" data-drag title="Reorder" aria-label="Reorder">⋮⋮</button>`:''}
+    <div class="acts"><button class="ico del" data-tdel="${t.id}">✕</button></div>`;
   return row;
 }
 function bindTaskRows(c){
   c.querySelectorAll('[data-task]').forEach(x=>x.onclick=()=>toggleTask(x.dataset.task));
-  c.querySelectorAll('[data-tedit]').forEach(x=>x.onclick=()=>openTaskSheet(x.dataset.tedit));
+  c.querySelectorAll('[data-topen]').forEach(x=>x.onclick=()=>openTaskDetail(x.dataset.topen));
   c.querySelectorAll('[data-tdel]').forEach(x=>x.onclick=()=>deleteTask(x.dataset.tdel));
 }
 
 function renderTasks(c){
   const vis=visibleTasks(), todayKey=key(new Date());
+  const byOrder=(a,b)=>(a.order||0)-(b.order||0);
+  // Manual order wins so a drag survives a reload; date only breaks ties.
   const scheduled=vis.filter(t=>!t.done&&t.date)
-    .sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'99:99').localeCompare(b.time||'99:99'));
-  const someday=vis.filter(t=>!t.done&&!t.date);
-  const done=vis.filter(t=>t.done&&t.doneAt===todayKey);
+    .sort((a,b)=>byOrder(a,b)||a.date.localeCompare(b.date)||(a.time||'99:99').localeCompare(b.time||'99:99'));
+  const someday=vis.filter(t=>!t.done&&!t.date).sort(byOrder);
+  const done=vis.filter(t=>t.done&&t.doneAt===todayKey).sort(byOrder);
 
   if(done.length) c.insertAdjacentHTML('beforeend',
     `<div class="tab-actions"><button class="opt-pill off" onclick="clearCompleted()">Clear completed</button></div>`);
@@ -1585,18 +1739,37 @@ function renderTasks(c){
     c.insertAdjacentHTML('beforeend','<div class="empty">No tasks yet.<br>Tap + to add one.</div>');
     return;
   }
-  if(scheduled.length){
-    c.insertAdjacentHTML('beforeend','<div class="day-sep">Scheduled</div>');
-    scheduled.forEach(t=>c.appendChild(taskRow(t)));
-  }
-  if(someday.length){
-    c.insertAdjacentHTML('beforeend','<div class="day-sep">Someday</div>');
-    someday.forEach(t=>c.appendChild(taskRow(t)));
-  }
+
+  // Each section is its own drag list, so a dated task can never land in
+  // Someday and finished items stay in Done.
+  const section=(title,list)=>{
+    c.insertAdjacentHTML('beforeend',`<div class="day-sep">${title}</div>`);
+    const wrap=document.createElement('div'); wrap.className='task-sec';
+    list.forEach(t=>wrap.appendChild(taskRow(t,true)));
+    c.appendChild(wrap);
+    makeReorderable(wrap,ids=>{
+      // Renumber only this section, leaving the others untouched.
+      const base=Math.min(...list.map(t=>t.order||0));
+      ids.forEach((id,i)=>{ const t=TASKS.find(x=>x.id===id); if(t) t.order=base+i; });
+      saveAll(); render();
+    });
+  };
+
+  if(scheduled.length) section('Scheduled',scheduled);
+  if(someday.length) section('Someday',someday);
   if(done.length){
     c.insertAdjacentHTML('beforeend',
       `<div class="day-sep tasks-done-head" id="tasksDoneHead">Done (${done.length}) ${tasksDoneOpen?'▾':'▸'}</div>`);
-    if(tasksDoneOpen) done.forEach(t=>c.appendChild(taskRow(t)));
+    if(tasksDoneOpen){
+      const wrap=document.createElement('div'); wrap.className='task-sec';
+      done.forEach(t=>wrap.appendChild(taskRow(t,true)));
+      c.appendChild(wrap);
+      makeReorderable(wrap,ids=>{
+        const base=Math.min(...done.map(t=>t.order||0));
+        ids.forEach((id,i)=>{ const t=TASKS.find(x=>x.id===id); if(t) t.order=base+i; });
+        saveAll(); render();
+      });
+    }
     const h=document.getElementById('tasksDoneHead');
     if(h) h.onclick=()=>{ tasksDoneOpen=!tasksDoneOpen; render(); };
   }
@@ -1642,9 +1815,8 @@ function renderAgenda(c){
       row.className='row'+(t.done?' done':'');
       row.innerHTML=`<span class="ag-time">${a.allDay?'all<small>day</small>':a.t}</span>
         <div class="check ${t.done?'on':''}" data-task="${t.id}"></div>
-        <div class="rbody"><div class="rtitle">${esc(t.title)}</div>
-          <div class="rmeta"><span class="tag task">Task</span></div></div>
-        <div class="acts"><button class="ico edit" data-tedit="${t.id}">✎</button></div>`;
+        <div class="rbody" data-topen="${t.id}"><div class="rtitle">${esc(t.title)||'<span class="ghost">Untitled</span>'}</div>
+          <div class="rmeta"><span class="tag task">Task</span>${subCount(t)}</div></div>`;
     } else {
       const e=a.ref, done=!!mr['ev:'+e.id];
       row.className='row'+(done?' done':'');
@@ -1928,7 +2100,7 @@ function renderDayView(c){
       return `<div class="day-allday" style="border-left-color:${color};background:${hexA(color,0.16)}">${esc(e.title)}</div>`;
     }).concat(untimedTasks.map(t=>
       `<div class="day-allday" style="border-left-color:${TASK_COLOR};background:${hexA(TASK_COLOR,0.16)}"
-        onclick="openTaskSheet('${t.id}')">${esc(t.title)}</div>`
+        onclick="openTaskDetail('${t.id}')">${esc(t.title)}</div>`
     )).join('');
     c.insertAdjacentHTML('beforeend',`<div class="day-allday-strip">${rows}</div>`);
   }
@@ -1941,7 +2113,7 @@ function renderDayView(c){
     const [h,m]=t.time.split(':').map(Number);
     const start=h*60+m;
     return {start,end:start+30,dur:30,title:t.title,color:TASK_COLOR,
-      tap:`onclick="openTaskSheet('${t.id}')"`};
+      tap:`onclick="openTaskDetail('${t.id}')"`};
   }));
   layoutDay(entries);
 
@@ -2308,6 +2480,8 @@ function openMarkerDetail(mkKey){
   document.getElementById('f-name-field').style.display='none';
   document.getElementById('markerDetail').innerHTML=markerDetailHTML(mkKey);
   showSheetChrome(false);
+  document.getElementById('taskDetail').style.display='none';
+  document.getElementById('markerDetail').style.display='block';
   document.getElementById('overlay').classList.add('open');
 }
 
@@ -2485,35 +2659,151 @@ function sheetTypeFor(kind,ref){
 }
 
 let tMode='none';
-function setTMode(m){
+function setTMode(m,live){
   tMode=m;
   document.getElementById('tseg-none').classList.toggle('on',m==='none');
   document.getElementById('tseg-date').classList.toggle('on',m==='date');
   document.getElementById('tDateBox').style.display=m==='date'?'block':'none';
+  if(live!==false&&typeof applySchedule==='function'&&currentTask()) applySchedule();
 }
-function openTaskSheet(id){
-  showSheetChrome(true);
-  sheetType='task'; editing=id||null;
+function nextTaskOrder(){
+  return TASKS.reduce((m,t)=>Math.max(m,typeof t.order==='number'?t.order:0),0)+1;
+}
+function newTaskAndOpen(){
+  const t={id:'t'+Date.now(),title:'',done:false,doneAt:null,date:null,time:null,
+    notes:'',subtasks:[],order:nextTaskOrder(),createdAt:new Date().toISOString()};
+  TASKS.push(t);
+  openTaskDetail(t.id);
+}
+
+// Edits apply live, so the detail view is built once on open and then patched
+// in place — a full re-render on every keystroke would drop the caret.
+function openTaskDetail(id){
+  const t=TASKS.find(x=>x.id===id); if(!t) return;
+  sheetType='task'; editing=id;
   ['routineFields','suppFields','eventFields','panelFields','eatFields']
     .forEach(x=>document.getElementById(x).style.display='none');
-  document.getElementById('taskFields').style.display='block';
-  document.getElementById('f-name-field').style.display='block';
-  document.getElementById('f-name-label').textContent='Name';
-  document.getElementById('deleteBtn').style.display=id?'block':'none';
-  document.getElementById('saveBtn').textContent=id?'Save':'Add';
-  document.getElementById('sheetTitle').textContent=(id?'Edit ':'Add ')+'task';
-  document.getElementById('sheetHint').textContent =
-    id ? 'Change any detail below.' : 'Give it a date only if it has to happen on one.';
-  const t=id?TASKS.find(x=>x.id===id):null;
-  document.getElementById('f-name').value=t?t.title:'';
-  document.getElementById('t-date').value=(t&&t.date)?t.date:dk();
-  document.getElementById('t-time').value=(t&&t.time)?t.time:'';
-  setTMode(t&&t.date?'date':'none');
+  document.getElementById('f-name-field').style.display='none';
+  showSheetChrome(false);
+  document.getElementById('markerDetail').style.display='none';
+  document.getElementById('taskDetail').style.display='block';
+
+  const title=document.getElementById('td-title');
+  title.value=t.title;
+  title.oninput=()=>{ t.title=title.value; saveAll(); };
+
+  const notes=document.getElementById('td-notes');
+  notes.value=t.notes||'';
+  const grow=()=>{ notes.style.height='auto'; notes.style.height=notes.scrollHeight+'px'; };
+  notes.oninput=()=>{ t.notes=notes.value; grow(); saveAll(); };
+
+  document.getElementById('t-date').value=t.date||dk();
+  document.getElementById('t-time').value=t.time||'';
+  setTMode(t.date?'date':'none',false);
+  document.getElementById('taskFields').style.display='none';   // collapsed until tapped
+  syncSchedLine();
+
+  document.getElementById('t-date').onchange=()=>{ applySchedule(); };
+  document.getElementById('t-time').onchange=()=>{ applySchedule(); };
+
+  renderSubtasks();
   document.getElementById('overlay').classList.add('open');
+  setTimeout(grow,0);
+  if(!t.title) setTimeout(()=>title.focus(),50);
+}
+
+function currentTask(){ return TASKS.find(x=>x.id===editing)||null; }
+
+function syncSchedLine(){
+  const t=currentTask(); if(!t) return;
+  const el=document.getElementById('td-sched');
+  el.textContent=t.date?taskDateLabel(t):'No date';
+}
+function toggleSchedEditor(){
+  const box=document.getElementById('taskFields');
+  box.style.display=box.style.display==='none'?'block':'none';
+}
+// Called whenever the segmented control or either field changes.
+function applySchedule(){
+  const t=currentTask(); if(!t) return;
+  t.date=tMode==='date'?(document.getElementById('t-date').value||dk()):null;
+  t.time=tMode==='date'?(document.getElementById('t-time').value||null):null;
+  syncSchedLine(); saveAll();
+}
+
+function deleteCurrentTask(){
+  const id=editing; if(!id) return;
+  const i=TASKS.findIndex(t=>t.id===id); if(i<0) return;
+  const t=TASKS[i];
+  closeSheet();
+  deleteWithUndo(t.title||'Task', ()=>TASKS.splice(i,1), ()=>TASKS.splice(i,0,t));
+}
+
+// A task the user opened, typed nothing into and closed again should not
+// linger as an empty row.
+function discardEmptyTask(id){
+  const i=TASKS.findIndex(t=>t.id===id); if(i<0) return;
+  const t=TASKS[i];
+  if(!String(t.title||'').trim() && !(t.subtasks||[]).length) TASKS.splice(i,1);
+}
+
+function renderSubtasks(){
+  const t=currentTask(), box=document.getElementById('td-subs');
+  if(!t||!box) return;
+  // Ticked items sink below the open ones, keeping their relative order.
+  const subs=[...(t.subtasks||[])];
+  box.innerHTML=subs.map(s=>`
+    <div class="sub-item${s.done?' done':''}" data-item="${s.id}">
+      <button class="sub-check ${s.done?'on':''}" data-sub="${s.id}"></button>
+      <input class="sub-input" value="${esc(s.title)}" data-subtitle="${s.id}" placeholder="Item">
+      <button class="drag-handle" data-drag title="Reorder" aria-label="Reorder">⋮⋮</button>
+      <button class="sub-del" data-subdel="${s.id}">✕</button>
+    </div>`).join('')
+    +`<div class="sub-item">
+        <button class="sub-check" style="visibility:hidden"></button>
+        <input class="sub-input" id="subAdd" placeholder="Add item">
+      </div>`;
+
+  box.querySelectorAll('[data-sub]').forEach(el=>el.onclick=()=>{
+    const s=t.subtasks.find(x=>x.id===el.dataset.sub); if(!s) return;
+    s.done=!s.done;
+    sinkDoneSubtasks(t);
+    saveAll(); renderSubtasks();
+  });
+  box.querySelectorAll('[data-subtitle]').forEach(el=>el.oninput=()=>{
+    const s=t.subtasks.find(x=>x.id===el.dataset.subtitle); if(s){ s.title=el.value; saveAll(); }
+  });
+  box.querySelectorAll('[data-subdel]').forEach(el=>el.onclick=()=>{
+    const i=t.subtasks.findIndex(x=>x.id===el.dataset.subdel); if(i<0) return;
+    const s=t.subtasks[i];
+    deleteWithUndo(s.title||'Item',
+      ()=>{ t.subtasks.splice(i,1); renderSubtasks(); },
+      ()=>{ t.subtasks.splice(i,0,s); renderSubtasks(); });
+  });
+
+  const add=document.getElementById('subAdd');
+  if(add) add.onkeydown=e=>{
+    if(e.key!=='Enter') return;
+    e.preventDefault();
+    const v=add.value.trim(); if(!v) return;
+    t.subtasks.push({id:'s'+Date.now()+Math.floor(Math.random()*1000),title:v,done:false});
+    sinkDoneSubtasks(t);
+    saveAll(); renderSubtasks();
+    const nxt=document.getElementById('subAdd'); if(nxt) nxt.focus();   // keep typing
+  };
+
+  makeReorderable(box,ids=>{
+    const map={}; t.subtasks.forEach(s=>map[s.id]=s);
+    t.subtasks=ids.map(id=>map[id]).filter(Boolean);
+    saveAll(); renderSubtasks();
+  });
+}
+function sinkDoneSubtasks(t){
+  t.subtasks=[...t.subtasks.filter(s=>!s.done), ...t.subtasks.filter(s=>s.done)];
 }
 
 function openSheet(kind,ref){
-  if(activeTab==='tasks'){ openTaskSheet(kind==='edit'?ref:null); return; }
+  if(activeTab==='tasks'){ kind==='edit'?openTaskDetail(ref):newTaskAndOpen(); return; }
   showSheetChrome(true);
   sheetType=sheetTypeFor(kind,ref);
   editing=kind==='edit'?ref:null;
@@ -2570,7 +2860,12 @@ function openSheet(kind,ref){
   }
   document.getElementById('overlay').classList.add('open');
 }
-function closeSheet(){ document.getElementById('overlay').classList.remove('open'); editing=null; }
+function closeSheet(){
+  if(sheetType==='task'&&editing){ discardEmptyTask(editing); render(); }
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('taskDetail').style.display='none';
+  editing=null;
+}
 
 // The marker detail view borrows the sheet, so the normal title/hint/action
 // chrome steps aside for it and comes back for every editing sheet.
@@ -2578,7 +2873,11 @@ function showSheetChrome(on){
   document.getElementById('sheetTitle').style.display=on?'block':'none';
   document.getElementById('sheetHint').style.display=on?'block':'none';
   document.querySelector('.sheet-actions').style.display=on?'flex':'none';
-  document.getElementById('markerDetail').style.display=on?'none':'block';
+  // Editing sheets clear both detail panels; each detail opener shows its own.
+  if(on){
+    document.getElementById('markerDetail').style.display='none';
+    document.getElementById('taskDetail').style.display='none';
+  }
 }
 
 function setCompare(which,id){
@@ -2635,20 +2934,6 @@ function saveItem(){
       const dv=document.getElementById('p-date').value;
       if(dv) p.date=dv;
       sortPanels(); resetCompare();
-    }
-    closeSheet(); render(); return;
-  }
-  if(sheetType==='task'){
-    const name=document.getElementById('f-name').value.trim();
-    if(!name){ document.getElementById('f-name').focus(); return; }
-    const date=tMode==='date'?(document.getElementById('t-date').value||dk()):null;
-    const time=tMode==='date'?(document.getElementById('t-time').value||null):null;
-    if(editing){
-      const t=TASKS.find(x=>x.id===editing);
-      if(t){ t.title=name; t.date=date; t.time=time; }
-    } else {
-      TASKS.push({id:'t'+Date.now(),title:name,done:false,doneAt:null,
-        date,time,createdAt:new Date().toISOString()});
     }
     closeSheet(); render(); return;
   }
