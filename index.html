@@ -327,7 +327,7 @@
   .upload-zone h3 { font-family:Georgia,serif; font-size:17px; margin-bottom:5px; }
   .upload-zone p { font-size:12.5px; color:var(--muted); line-height:1.5; margin-bottom:14px; }
 
-  .mk { display:flex; align-items:center; gap:10px; padding:12px 6px; border-bottom:1px solid var(--line); }
+  .mk { display:flex; align-items:center; gap:10px; padding:12px 6px; border-bottom:1px solid var(--line); cursor:pointer; }
   .mk-name { flex:1; min-width:0; font-size:14.5px; font-weight:600; }
   .mk-sub { font-size:11.5px; color:var(--faint); margin-top:2px; }
   .mk-val { flex-shrink:0; font-size:14.5px; font-weight:700; text-align:right; min-width:74px; }
@@ -402,6 +402,28 @@
   .dows button { flex:1; aspect-ratio:1; border-radius:50%; border:1px solid var(--line); background:var(--bg);
     color:var(--muted); font-size:13px; font-weight:600; }
   .dows button.on { background:var(--frost); color:var(--bg); border-color:var(--frost); }
+  /* Marker detail view (reuses the sheet overlay) */
+  .md-back { background:none; border:none; color:var(--frost); font-size:14px;
+    font-weight:600; padding:0 0 14px; }
+  .md-name { font-family:Georgia,serif; font-size:21px; font-weight:600; line-height:1.2; }
+  .md-meta { font-size:12.5px; color:var(--muted); margin-top:4px; }
+  .md-latest { display:flex; align-items:baseline; gap:10px; margin:14px 0 4px; }
+  .md-val { font-family:Georgia,serif; font-size:32px; font-weight:600; line-height:1; }
+  .md-val.inr { color:var(--moss); } .md-val.outr { color:var(--amber); }
+  .md-unit { font-size:13px; color:var(--muted); }
+  .md-delta { font-size:13px; font-weight:700; }
+  .md-note { font-size:12px; color:var(--faint); margin:10px 0 0; line-height:1.5; }
+  .md-chart { margin:16px 0 6px; }
+  .md-chart svg { width:100%; height:auto; display:block; }
+  .md-sec { font-family:Georgia,serif; font-size:13px; color:var(--muted);
+    padding:16px 0 6px; letter-spacing:.04em; text-transform:uppercase; }
+  .md-row { display:flex; align-items:baseline; gap:10px; padding:9px 0;
+    border-bottom:1px solid var(--line); font-size:13px; }
+  .md-date { flex:1; color:var(--ink); }
+  .md-reading { font-weight:700; white-space:nowrap; }
+  .md-chg { min-width:62px; text-align:right; font-size:12px; font-weight:700; }
+  .md-flag { font-size:10.5px; color:var(--amber); font-weight:700; margin-left:5px; }
+
   .sheet-actions { display:flex; gap:10px; margin-top:20px; }
   .link-btn { width:100%; margin-top:6px; padding:12px; border-radius:10px; background:var(--frost-soft);
     color:var(--frost); border:none; font-size:14px; font-weight:600; }
@@ -525,6 +547,8 @@
         <div class="field"><label>Duration · hours</label><input id="eat-dur-in" type="number" value="8" min="1" max="16" step="0.5"></div>
       </div>
     </div>
+
+    <div id="markerDetail" style="display:none"></div>
 
     <div class="sheet-actions">
       <button class="btn-ghost" onclick="closeSheet()">Cancel</button>
@@ -2049,6 +2073,177 @@ function brandCard(id,cls,label,status,detail){
   </div>`;
 }
 
+/* ---------- MARKER DETAIL ----------
+   One marker's history across every panel, as a sheet with an inline-SVG
+   trend chart. No charting library: the app stays a single self-contained
+   file. */
+
+const normLabel=s=>String(s||'').toLowerCase().replace(/[^a-z0-9äöüß]/g,'');
+
+function refLabel(v){
+  if(v.refLo!=null&&v.refHi!=null) return v.refLo+'–'+v.refHi;
+  if(v.refHi!=null) return '< '+v.refHi;
+  if(v.refLo!=null) return '> '+v.refLo;
+  return '';
+}
+function inRange(v){
+  if(v==null||v.v==null) return null;
+  if(v.refLo!=null&&v.refHi!=null) return v.v>=v.refLo&&v.v<=v.refHi;
+  if(v.refHi!=null) return v.v<=v.refHi;
+  if(v.refLo!=null) return v.v>=v.refLo;
+  return null;
+}
+function fmtPanelDate(s){
+  const [y,m,d]=String(s).split('-').map(Number);
+  if(!y||!m||!d) return String(s);
+  return new Date(y,m-1,d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+}
+const fmtNum=n=>Math.abs(n)>=100?n.toFixed(0):Math.abs(n)>=10?n.toFixed(1):n.toFixed(2).replace(/0$/,'');
+
+// PANELS is date-sorted, so readings come back chronologically. The parser's
+// key already includes section and unit, which is what we want — but a lab
+// that renames a section or switches units between reports would break the
+// chain, so fall back to a normalised label when the key finds no history.
+function collectReadings(mkKey){
+  const byKey=[];
+  PANELS.forEach(p=>{ const hit=p.values.find(x=>x.key===mkKey); if(hit) byKey.push({panel:p,v:hit}); });
+  if(byKey.length>=2) return byKey;
+  const latest=byKey.length?byKey[byKey.length-1].v:null;
+  if(!latest) return byKey;
+  const target=normLabel(latest.label);
+  const byLabel=[];
+  PANELS.forEach(p=>{ const hit=p.values.find(x=>normLabel(x.label)===target); if(hit) byLabel.push({panel:p,v:hit}); });
+  return byLabel.length>byKey.length?byLabel:byKey;
+}
+
+function markerChartSVG(readings,latest){
+  const num=readings.filter(r=>r.v.text==null&&isFinite(r.v.v));
+  if(!num.length) return '';
+  const W=320,H=180,PL=38,PR=10,PT=12,PB=24;
+  const PW=W-PL-PR, PH=H-PT-PB;
+  const ts=num.map(r=>{ const [y,m,d]=r.panel.date.split('-').map(Number); return new Date(y,m-1,d).getTime(); });
+  const t0=Math.min(...ts), t1=Math.max(...ts);
+  const xOf=t=> (t1===t0) ? PL+PW/2 : PL+(t-t0)/(t1-t0)*PW;
+
+  const vals=num.map(r=>r.v.v);
+  let lo=Math.min(...vals), hi=Math.max(...vals);
+  const pad=((hi-lo)||Math.abs(hi)||1)*0.1;
+  let ymin=lo-pad, ymax=hi+pad;
+  // Pull the reference band in only when it is near the data; a far-off
+  // bound would flatten the trend into a straight line.
+  const span=ymax-ymin;
+  const {refLo,refHi}=latest;
+  if(refLo!=null&&refLo>ymin-span&&refLo<ymax+span){ ymin=Math.min(ymin,refLo-pad); ymax=Math.max(ymax,refLo+pad); }
+  if(refHi!=null&&refHi>ymin-span&&refHi<ymax+span){ ymin=Math.min(ymin,refHi-pad); ymax=Math.max(ymax,refHi+pad); }
+  if(ymax-ymin<1e-9){ ymin-=1; ymax+=1; }
+  const yOf=v=>PT+(1-(v-ymin)/(ymax-ymin))*PH;
+
+  let band='';
+  if(refLo!=null||refHi!=null){
+    const top=refHi!=null?yOf(Math.min(refHi,ymax)):PT;
+    const bot=refLo!=null?yOf(Math.max(refLo,ymin)):PT+PH;
+    if(bot>top) band=`<rect x="${PL}" y="${top}" width="${PW}" height="${bot-top}"
+      fill="var(--moss)" opacity="0.10"/>`;
+  }
+
+  const pts=num.map((r,i)=>xOf(ts[i]).toFixed(1)+','+yOf(r.v.v).toFixed(1));
+  const line=num.length>1
+    ? `<polyline points="${pts.join(' ')}" fill="none" stroke="var(--frost)" stroke-width="2"
+        stroke-linejoin="round" stroke-linecap="round"/>` : '';
+  const dots=num.map((r,i)=>{
+    const inR=inRange(r.v), col=(inR===false)?'var(--amber)':'var(--frost)';
+    const [cx,cy]=[xOf(ts[i]),yOf(r.v.v)];
+    // A qualifier ("<0.06") means the true value is unknown — hollow it out
+    // rather than implying a precise reading.
+    return r.v.qual
+      ? `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="var(--bg)" stroke="${col}" stroke-width="2"/>`
+      : `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="${col}"/>`;
+  }).join('');
+
+  const first=num[0].panel.date, last=num[num.length-1].panel.date;
+  const dateLbls=num.length>1
+    ? `<text x="${PL}" y="${H-6}" fill="var(--faint)" font-size="10">${esc(fmtPanelDate(first))}</text>
+       <text x="${W-PR}" y="${H-6}" fill="var(--faint)" font-size="10" text-anchor="end">${esc(fmtPanelDate(last))}</text>`
+    : `<text x="${PL+PW/2}" y="${H-6}" fill="var(--faint)" font-size="10" text-anchor="middle">${esc(fmtPanelDate(first))}</text>`;
+
+  return `<div class="md-chart"><svg viewBox="0 0 ${W} ${H}" role="img">
+    ${band}
+    <line x1="${PL}" y1="${PT+PH}" x2="${W-PR}" y2="${PT+PH}" stroke="var(--line)" stroke-width="1"/>
+    ${line}${dots}
+    <text x="${PL-6}" y="${PT+4}" fill="var(--faint)" font-size="10" text-anchor="end">${esc(fmtNum(ymax))}</text>
+    <text x="${PL-6}" y="${PT+PH}" fill="var(--faint)" font-size="10" text-anchor="end">${esc(fmtNum(ymin))}</text>
+    ${dateLbls}
+  </svg></div>`;
+}
+
+function markerDetailHTML(mkKey){
+  const readings=collectReadings(mkKey);
+  const back=`<button class="md-back" onclick="closeSheet()">‹ Back</button>`;
+  if(!readings.length) return back+`<div class="md-note">No readings found for this marker.</div>`;
+
+  const last=readings[readings.length-1], v=last.v;
+  const isText=v.text!=null;
+  const rl=refLabel(v), inR=inRange(v);
+
+  // delta against the previous numeric reading
+  let deltaHTML='';
+  if(!isText){
+    const prevNum=[...readings].slice(0,-1).reverse().find(r=>r.v.text==null&&isFinite(r.v.v));
+    if(prevNum){
+      const d=v.v-prevNum.v.v;
+      const cls=Math.abs(d)<1e-9?'flat':(d>0?'up':'down');
+      const arrow=Math.abs(d)<1e-9?'':(d>0?'▲':'▼');
+      deltaHTML=`<span class="md-delta ${cls}">${arrow} ${d>0?'+':''}${fmtNum(d)}</span>`;
+    }
+  }
+
+  const header=`
+    <div class="md-name">${esc(v.displayName||v.label)}</div>
+    <div class="md-meta">${v.unit?esc(v.unit):'no unit'}${rl?' · reference '+esc(rl):' · no reference range'}${v.section?' · '+esc(v.section):''}</div>
+    <div class="md-latest">
+      <span class="md-val ${isText?'':(inR===false?'outr':inR===true?'inr':'')}">${isText?esc(v.text):esc(v.qual||'')+fmtNum(v.v)}</span>
+      ${!isText&&v.unit?`<span class="md-unit">${esc(v.unit)}</span>`:''}
+      ${deltaHTML}
+    </div>
+    <div class="md-meta">Latest · ${esc(fmtPanelDate(last.panel.date))}</div>`;
+
+  const chart=isText?'':markerChartSVG(readings,v);
+  const single=!isText&&readings.filter(r=>r.v.text==null&&isFinite(r.v.v)).length<2
+    ? `<div class="md-note">A trend needs at least two panels.</div>` : '';
+
+  const rows=[...readings].reverse().map((r,i,arr)=>{
+    const nxt=arr[i+1];   // chronologically previous
+    let chg='<span class="flat">—</span>';
+    if(r.v.text==null&&nxt&&nxt.v.text==null&&isFinite(r.v.v)&&isFinite(nxt.v.v)){
+      const d=r.v.v-nxt.v.v;
+      const cls=Math.abs(d)<1e-9?'flat':(d>0?'up':'down');
+      const arrow=Math.abs(d)<1e-9?'':(d>0?'▲':'▼');
+      chg=`<span class="${cls}">${arrow} ${d>0?'+':''}${fmtNum(d)}</span>`;
+    }
+    const odd=r.v.unit!==v.unit;
+    return `<div class="md-row">
+      <span class="md-date">${esc(fmtPanelDate(r.panel.date))}</span>
+      <span class="md-reading">${r.v.text!=null?esc(r.v.text):esc(r.v.qual||'')+fmtNum(r.v.v)}${r.v.unit?' '+esc(r.v.unit):''}${odd?'<span class="md-flag">≠ unit</span>':''}</span>
+      <span class="md-chg">${r.v.text!=null?'':chg}</span>
+    </div>`;
+  }).join('');
+
+  const mixed=readings.some(r=>r.v.unit!==v.unit)
+    ? `<div class="md-note">≠ marks a reading the lab reported in a different unit. It is listed but not plotted as comparable.</div>` : '';
+
+  return back+header+chart+single+`<div class="md-sec">Readings</div>`+rows+mixed;
+}
+
+function openMarkerDetail(mkKey){
+  sheetType='marker'; editing=null;
+  ['routineFields','suppFields','eventFields','panelFields','eatFields','taskFields']
+    .forEach(x=>document.getElementById(x).style.display='none');
+  document.getElementById('f-name-field').style.display='none';
+  document.getElementById('markerDetail').innerHTML=markerDetailHTML(mkKey);
+  showSheetChrome(false);
+  document.getElementById('overlay').classList.add('open');
+}
+
 function renderBio(c){
   c.insertAdjacentHTML('beforeend',
     `<div class="note warn" style="margin:6px 6px 14px"><span class="beta-pill">Beta</span>
@@ -2128,7 +2323,7 @@ function renderBio(c){
     }
     const valTxt=v.text!=null?esc(v.text):esc(v.qual||'')+v.v;
     c.insertAdjacentHTML('beforeend',
-      `<div class="mk">
+      `<div class="mk" data-mk="${v.key}">
         <div class="mk-name">${esc(v.displayName)}
           ${statusHTML}
         </div>
@@ -2150,6 +2345,7 @@ function renderBio(c){
   });
 
   c.querySelectorAll('[data-bio]').forEach(b=>b.onclick=()=>{ bioNote=bioNote===b.dataset.bio?'':b.dataset.bio; render(); });
+  c.querySelectorAll('[data-mk]').forEach(x=>x.onclick=()=>openMarkerDetail(x.dataset.mk));
   c.querySelectorAll('[data-pedit]').forEach(b=>b.onclick=()=>openPanelSheet(b.dataset.pedit));
   c.querySelectorAll('[data-pdel]').forEach(b=>b.onclick=()=>{
     const i=PANELS.findIndex(p=>p.id===b.dataset.pdel);
@@ -2229,6 +2425,7 @@ function setTMode(m){
   document.getElementById('tDateBox').style.display=m==='date'?'block':'none';
 }
 function openTaskSheet(id){
+  showSheetChrome(true);
   sheetType='task'; editing=id||null;
   ['routineFields','suppFields','eventFields','panelFields','eatFields']
     .forEach(x=>document.getElementById(x).style.display='none');
@@ -2250,6 +2447,7 @@ function openTaskSheet(id){
 
 function openSheet(kind,ref){
   if(activeTab==='tasks'){ openTaskSheet(kind==='edit'?ref:null); return; }
+  showSheetChrome(true);
   sheetType=sheetTypeFor(kind,ref);
   editing=kind==='edit'?ref:null;
   document.getElementById('routineFields').style.display=sheetType==='routine'?'block':'none';
@@ -2307,6 +2505,15 @@ function openSheet(kind,ref){
 }
 function closeSheet(){ document.getElementById('overlay').classList.remove('open'); editing=null; }
 
+// The marker detail view borrows the sheet, so the normal title/hint/action
+// chrome steps aside for it and comes back for every editing sheet.
+function showSheetChrome(on){
+  document.getElementById('sheetTitle').style.display=on?'block':'none';
+  document.getElementById('sheetHint').style.display=on?'block':'none';
+  document.querySelector('.sheet-actions').style.display=on?'flex':'none';
+  document.getElementById('markerDetail').style.display=on?'none':'block';
+}
+
 function setCompare(which,id){
   if(which==='a') cmpA=id; else cmpB=id;
   render();
@@ -2315,6 +2522,7 @@ function resetCompare(){ cmpA=null; cmpB=null; }
 
 function openPanelSheet(id){
   const p=PANELS.find(x=>x.id===id); if(!p) return;
+  showSheetChrome(true);
   sheetType='panel'; editing=id;
   document.getElementById('routineFields').style.display='none';
   document.getElementById('suppFields').style.display='none';
@@ -2334,6 +2542,7 @@ function openPanelSheet(id){
 }
 
 function openEatSheet(){
+  showSheetChrome(true);
   sheetType='eat'; editing=null;
   document.getElementById('routineFields').style.display='none';
   document.getElementById('suppFields').style.display='none';
