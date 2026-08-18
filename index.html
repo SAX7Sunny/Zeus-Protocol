@@ -423,6 +423,10 @@
   .md-reading { font-weight:700; white-space:nowrap; }
   .md-chg { min-width:62px; text-align:right; font-size:12px; font-weight:700; }
   .md-flag { font-size:10.5px; color:var(--amber); font-weight:700; margin-left:5px; }
+  .md-point { font-size:12.5px; color:var(--muted); line-height:1.55; padding:9px 11px;
+    background:var(--bg); border:1px solid var(--line); border-radius:9px; }
+  .md-point b { color:var(--ink); font-weight:700; }
+  .md-sub { color:var(--faint); }
 
   .sheet-actions { display:flex; gap:10px; margin-top:20px; }
   .link-btn { width:100%; margin-top:6px; padding:12px; border-radius:10px; background:var(--frost-soft);
@@ -2079,6 +2083,18 @@ function brandCard(id,cls,label,status,detail){
    file. */
 
 const normLabel=s=>String(s||'').toLowerCase().replace(/[^a-z0-9äöüß]/g,'');
+let mdPoints=[];   // per-dot summaries for the chart currently on screen
+
+function pickMarkerPoint(i){
+  const p=mdPoints[i], box=document.getElementById('mdPoint');
+  if(!p||!box) return;
+  const rangeCls=p.range==='in range'?'inrange':'outrange';
+  box.innerHTML=`<b>${esc(p.date)}</b> · ${esc(p.val)}`
+    +(p.range?` · <span class="${rangeCls}">${p.range}</span>`:'')
+    +(p.chg?`<br><span class="md-sub">${esc(p.chg)}</span>`:'')
+    +(p.qual?`<br><span class="md-sub">Reported as a limit — the exact value is unknown.</span>`:'');
+  document.querySelectorAll('.md-dot').forEach((el,j)=>el.setAttribute('r',j===i?'6':'4'));
+}
 
 function refLabel(v){
   if(v.refLo!=null&&v.refHi!=null) return v.refLo+'–'+v.refHi;
@@ -2150,14 +2166,34 @@ function markerChartSVG(readings,latest){
   const line=num.length>1
     ? `<polyline points="${pts.join(' ')}" fill="none" stroke="var(--frost)" stroke-width="2"
         stroke-linejoin="round" stroke-linecap="round"/>` : '';
+  // Summary shown when a dot is tapped, indexed the same as the dots.
+  mdPoints=num.map((r,i)=>{
+    const prev=i>0?num[i-1]:null;
+    let chg='';
+    if(prev){
+      const d=r.v.v-prev.v.v;
+      chg=(Math.abs(d)<1e-9?'No change':(d>0?'▲ +'+fmtNum(d):'▼ '+fmtNum(d)))
+        +' since '+fmtPanelDate(prev.panel.date);
+    }
+    const inR=inRange(r.v);
+    return {date:fmtPanelDate(r.panel.date),
+      val:(r.v.qual||'')+fmtNum(r.v.v)+(r.v.unit?' '+r.v.unit:''),
+      range:inR===true?'in range':inR===false?'outside range':'',
+      qual:!!r.v.qual, chg};
+  });
+
   const dots=num.map((r,i)=>{
     const inR=inRange(r.v), col=(inR===false)?'var(--amber)':'var(--frost)';
     const [cx,cy]=[xOf(ts[i]),yOf(r.v.v)];
     // A qualifier ("<0.06") means the true value is unknown — hollow it out
     // rather than implying a precise reading.
-    return r.v.qual
-      ? `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="var(--bg)" stroke="${col}" stroke-width="2"/>`
-      : `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="${col}"/>`;
+    const dot=r.v.qual
+      ? `<circle class="md-dot" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="var(--bg)" stroke="${col}" stroke-width="2"/>`
+      : `<circle class="md-dot" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="${col}"/>`;
+    // A 4px dot is far too small to hit on a phone, so an invisible disc
+    // carries the tap.
+    return dot+`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="12" fill="transparent"
+      style="cursor:pointer" onclick="pickMarkerPoint(${i})"/>`;
   }).join('');
 
   const first=num[0].panel.date, last=num[num.length-1].panel.date;
@@ -2207,7 +2243,8 @@ function markerDetailHTML(mkKey){
     </div>
     <div class="md-meta">Latest · ${esc(fmtPanelDate(last.panel.date))}</div>`;
 
-  const chart=isText?'':markerChartSVG(readings,v);
+  const chart=isText?'':markerChartSVG(readings,v);   // also fills mdPoints
+  const pointBox=chart?`<div class="md-point" id="mdPoint">Tap a point on the chart for details.</div>`:'';
   const single=!isText&&readings.filter(r=>r.v.text==null&&isFinite(r.v.v)).length<2
     ? `<div class="md-note">A trend needs at least two panels.</div>` : '';
 
@@ -2231,7 +2268,7 @@ function markerDetailHTML(mkKey){
   const mixed=readings.some(r=>r.v.unit!==v.unit)
     ? `<div class="md-note">≠ marks a reading the lab reported in a different unit. It is listed but not plotted as comparable.</div>` : '';
 
-  return back+header+chart+single+`<div class="md-sec">Readings</div>`+rows+mixed;
+  return back+header+chart+pointBox+single+`<div class="md-sec">Readings</div>`+rows+mixed;
 }
 
 function openMarkerDetail(mkKey){
