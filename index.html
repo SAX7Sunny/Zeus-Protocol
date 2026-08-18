@@ -1351,6 +1351,32 @@ function renderDate(){
 function shiftDay(n){ viewDate.setDate(viewDate.getDate()+n); render(); }
 function goToday(){ viewDate=new Date(); viewDate.setHours(0,0,0,0); render(); }
 
+/* Open a tab where the user actually is in their day, not at the top of a
+   list they have already worked through. Each render marks one element with
+   id="scrollAnchor" — the NOW line, the next unchecked row, the blood
+   panels — and this scrolls it just under the fixed header. Only runs on tab
+   switch and at boot, never on re-render, or ticking something would yank
+   the page. Scrolling up is always available. */
+function scrollToAnchor(){
+  setTimeout(()=>{
+    const el=document.getElementById('scrollAnchor');
+    if(!el) return;
+    const hh=document.querySelector('header').offsetHeight;
+    const top=el.getBoundingClientRect().top+window.scrollY-hh-12;
+    window.scrollTo({top:Math.max(0,top),behavior:'instant'});
+  },0);
+}
+const ANCHORED_TABS=['agenda','routine','supps','bio'];
+
+// Marks the first row still open as the anchor, ignoring anything already
+// ticked or switched off for the day.
+function markFirstOpenRow(c){
+  if(c.querySelector('#scrollAnchor')) return;
+  const first=[...c.querySelectorAll('.row')]
+    .find(r=>!r.classList.contains('done')&&!r.classList.contains('opt-off'));
+  if(first) first.id='scrollAnchor';
+}
+
 function syncTabFade(){
   const w=document.getElementById('tabsWrap'), t=document.getElementById('tabs');
   if(!w||!t) return;
@@ -1375,6 +1401,7 @@ function setTab(t){
   if(btn&&btn.scrollIntoView) btn.scrollIntoView({inline:'center',block:'nearest'});
   syncTabFade();
   render();
+  if(ANCHORED_TABS.includes(t)) scrollToAnchor();
 }
 
 function renderFilters(){
@@ -1446,6 +1473,7 @@ function renderRoutine(c){
     const i=ROUTINES.indexOf(r);
     deleteWithUndo(r.title, ()=>ROUTINES.splice(i,1), ()=>ROUTINES.splice(i,0,r));
   });
+  markFirstOpenRow(c);
 }
 
 function renderSupps(c){
@@ -1485,6 +1513,7 @@ function renderSupps(c){
     const v=prompt('Time for "'+bl.title+'" (HH:MM)',bl.time);
     if(v&&/^\d{1,2}:\d{2}$/.test(v)){ bl.time=v.length===4?'0'+v:v; render(); }
   });
+  markFirstOpenRow(c);
 }
 
 /* ---------- TASKS ----------
@@ -1584,7 +1613,7 @@ function renderAgenda(c){
 
   items.forEach(a=>{
     if(nowT && !nowPlaced && a.t>nowT){
-      const n=document.createElement('div'); n.className='now-line';
+      const n=document.createElement('div'); n.className='now-line'; n.id='scrollAnchor';
       n.innerHTML='<span class="lbl">NOW '+nowT+'</span><span class="ln"></span>';
       c.appendChild(n); nowPlaced=true;
     }
@@ -1631,7 +1660,7 @@ function renderAgenda(c){
     c.appendChild(row);
   });
   if(nowT && !nowPlaced){
-    const n=document.createElement('div'); n.className='now-line';
+    const n=document.createElement('div'); n.className='now-line'; n.id='scrollAnchor';
     n.innerHTML='<span class="lbl">NOW '+nowT+'</span><span class="ln"></span>';
     c.appendChild(n);
   }
@@ -1646,6 +1675,7 @@ function renderAgenda(c){
   c.querySelectorAll('[data-goblk]').forEach(x=>x.onclick=()=>setTab('supps'));
   c.querySelectorAll('[data-edel]').forEach(b=>b.onclick=()=>deleteEventById(b.dataset.edel));
   bindTaskRows(c);
+  markFirstOpenRow(c);
 }
 
 function deleteEventById(id){
@@ -2323,7 +2353,7 @@ function renderBio(c){
     const opts=selId=>PANELS.slice().reverse().map(p=>
       `<option value="${p.id}"${p.id===selId?' selected':''}>${esc(p.date)}${p.label?' · '+esc(p.label):''}</option>`).join('');
     c.insertAdjacentHTML('beforeend',
-      `<div class="compare-row">
+      `<div class="compare-row" id="scrollAnchor">
         <span class="compare-lbl">Compare</span>
         <select class="compare-sel" onchange="setCompare('a',this.value)">${opts(cur.id)}</select>
         <span class="compare-lbl">against</span>
@@ -2331,7 +2361,7 @@ function renderBio(c){
       </div>`);
   } else {
     c.insertAdjacentHTML('beforeend',
-      `<div class="day-sep">Panel · ${esc(cur.date)} · no earlier panel to compare</div>`);
+      `<div class="day-sep" id="scrollAnchor">Panel · ${esc(cur.date)} · no earlier panel to compare</div>`);
   }
 
   let lastSection=null;
@@ -2737,6 +2767,7 @@ function exportEverything(){
 
 loadAll();
 render();
+if(ANCHORED_TABS.includes(activeTab)) scrollToAnchor();
 document.getElementById('tabs').addEventListener('scroll',syncTabFade,{passive:true});
 window.addEventListener('resize',syncTabFade);
 syncTabFade();
