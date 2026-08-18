@@ -341,8 +341,7 @@
   .compare-row { display:flex; align-items:center; gap:8px; margin:0 6px 14px; flex-wrap:wrap; }
   .compare-sel { flex:1; min-width:110px; padding:10px 12px; background:var(--bg); border:1px solid var(--line);
     border-radius:10px; color:var(--ink); font-size:13px; font-family:inherit; }
-  .compare-vs { font-size:12px; color:var(--muted); font-weight:600; flex-shrink:0; }
-  .compare-reset { width:auto; margin-top:0; padding:10px 14px; font-size:12.5px; flex-shrink:0; }
+  .compare-lbl { font-size:12px; color:var(--muted); font-weight:600; flex-shrink:0; }
 
 
   .streak-pill { font-size:10.5px; font-weight:800; letter-spacing:.04em;
@@ -706,7 +705,15 @@ function migratePanel(p){
       v:val.v, text:null, qual:'', unit:val.unit||(mk?mk.u:''),
       refLo:mk?mk.lo:null, refHi:mk?mk.hi:null};
   });
-  return {id:p.id, date:p.date, name:p.name, label:'', values};
+  return {id:p.id, date:p.date, name:p.name, label:'', values, createdAt:p.createdAt||''};
+}
+
+// PANELS is always ordered by the panel's own collection date, never by
+// upload order, so importing an older report later does not change which
+// panel counts as newest. createdAt breaks ties within one date.
+function sortPanels(){
+  PANELS.sort((a,b)=>a.date.localeCompare(b.date)
+    || String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
 }
 
 function applyBackup(d){
@@ -718,6 +725,7 @@ function applyBackup(d){
   IMPORTED=(d.IMPORTED||[]).map(e=>({...e,start:new Date(e.start)}));
   PANELS=(d.PANELS||[]).map(migratePanel);
   TASKS=Array.isArray(d.TASKS)?d.TASKS:[];
+  sortPanels();
   if(Array.isArray(d.SUBS)){
     SUBS=d.SUBS.map(s=>({...s,last:s.last?new Date(s.last):null,events:[]}));
   }else if(d.SUB_URL){
@@ -817,7 +825,8 @@ document.getElementById('backupInput').addEventListener('change',e=>{
    ====================================================================== */
 let PANELS=[];          // {id,date,name,label,values:[{key,section,label,displayName,v,text,qual,unit,refLo,refHi}]}
 let bioNote='', bioBusy=false, bioMsg='';
-let bioCurId=null, bioPrevId=null;   // null = default to the latest two panels
+// null = fall back to the default pair (newest by date vs second newest)
+let cmpA=null, cmpB=null;
 
 // German + English labels, since Austrian labs report in German.
 const MARKERS=[
@@ -866,6 +875,16 @@ async function ensurePdfJs(){
 }
 
 // Rebuild visual lines from pdf.js text items using their y position.
+const Y_TOL=2;   // items within this many units share a visual line
+
+function normaliseLine(s){
+  return String(s)
+    .replace(/\s+/g,' ')
+    .replace(/([([])\s+/g,'$1')    // no space just inside an opening bracket
+    .replace(/\s+([)\]])/g,'$1')   // ...or just before a closing one
+    .trim();
+}
+
 async function pdfToLines(file){
   await ensurePdfJs();
   const buf=await file.arrayBuffer();
@@ -874,24 +893,33 @@ async function pdfToLines(file){
   for(let p=1;p<=pdf.numPages;p++){
     const page=await pdf.getPage(p);
     const tc=await page.getTextContent();
-    const rows={};
+    // Group items into visual rows. Keying on an exact rounded y splits one
+    // visual line in two whenever items differ by a sub-pixel amount, which
+    // can strand a label from its value and lose the reading entirely — so
+    // match within a small tolerance instead.
+    const rows=[];
     tc.items.forEach(it=>{
-      const y=Math.round(it.transform[5]);
-      (rows[y]=rows[y]||[]).push({x:it.transform[4],s:it.str,w:it.width||0,h:Math.abs(it.transform[3])||it.height||10});
+      const y=it.transform[5];
+      const item={x:it.transform[4], s:it.str, w:it.width||0,
+        h:it.height||Math.abs(it.transform[0])||10};
+      const row=rows.find(r=>Math.abs(r.y-y)<=Y_TOL);
+      if(row) row.items.push(item); else rows.push({y,items:[item]});
     });
-    Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
-      // Some PDF generators split a single word ("Hämoglobin") into several
-      // text items, one per glyph run. Joining every item with a space
-      // turns names into "H ä m o g l o b i n" — instead, only insert a
-      // space where there's an actual horizontal gap (a real word boundary).
-      const items=rows[y].sort((a,b)=>a.x-b.x);
-      let line='', end=null;
-      items.forEach(it=>{
-        if(end!==null && it.x-end>it.h*0.2) line+=' ';
-        line+=it.s;
-        end=it.x+it.w;
+    rows.sort((a,b)=>b.y-a.y);
+    rows.forEach(r=>{
+      // pdf.js splits a visual line at font and kerning boundaries, so
+      // "Hämoglobin" can arrive as several items. Joining unconditionally
+      // with a space produced "Häm oglobin". Fragments of one word sit flush
+      // against each other, so only a real horizontal gap becomes a space.
+      const items=r.items.sort((a,b)=>a.x-b.x);
+      let line='';
+      items.forEach((cur,i)=>{
+        if(i===0){ line=cur.s; return; }
+        const prev=items[i-1];
+        const gap=cur.x-(prev.x+prev.w);
+        line += (gap > Math.max(1, 0.25*prev.h) ? ' ' : '') + cur.s;
       });
-      line=line.replace(/\s+/g,' ').trim();
+      line=normaliseLine(line);
       if(line) lines.push(line);
     });
   }
@@ -1000,8 +1028,9 @@ async function handlePdf(file){
     const values=parseLines(lines);
     if(!values.length){ bioBusy=false; bioMsg='No values found in that PDF. It may be a scan without a text layer.'; return render(); }
     values.forEach(v=>{ const mk=MARKERS.find(m=>m.re.test(v.label)); v.displayName=mk?mk.n:v.label; });
-    PANELS.push({id:'p'+Date.now(), date, name:file.name, label:'', values});
-    PANELS.sort((a,b)=>a.date.localeCompare(b.date));
+    PANELS.push({id:'p'+Date.now(), date, name:file.name, label:'', values,
+      createdAt:new Date().toISOString()});
+    sortPanels(); resetCompare();
     bioBusy=false; bioMsg='Added '+values.length+' values from '+file.name+'.';
   }catch(e){ bioBusy=false; bioMsg=e.message||'Could not read that PDF.'; }
   render();
@@ -2052,24 +2081,25 @@ function renderBio(c){
     return;
   }
 
+  // PANELS is sorted by date, so the default pair is the newest panel and the
+  // one before it — importing an older report later never shifts this.
   const hasHistory=PANELS.length>1;
-  const cur=(bioCurId&&PANELS.find(p=>p.id===bioCurId))||PANELS[PANELS.length-1];
-  const prev=hasHistory?((bioPrevId&&PANELS.find(p=>p.id===bioPrevId))||PANELS[PANELS.length-2]):null;
+  const cur=(cmpA&&PANELS.find(p=>p.id===cmpA))||PANELS[PANELS.length-1];
+  const prev=hasHistory?((cmpB&&PANELS.find(p=>p.id===cmpB))||PANELS[PANELS.length-2]):null;
 
   if(hasHistory){
     const opts=selId=>PANELS.slice().reverse().map(p=>
-      `<option value="${p.id}"${p.id===selId?' selected':''}>${esc(p.label||p.date)}</option>`).join('');
+      `<option value="${p.id}"${p.id===selId?' selected':''}>${esc(p.date)}${p.label?' · '+esc(p.label):''}</option>`).join('');
     c.insertAdjacentHTML('beforeend',
-      `<div class="day-sep">Compare panels</div>
-      <div class="compare-row">
-        <select class="compare-sel" onchange="setBioCompare('cur',this.value)">${opts(cur.id)}</select>
-        <span class="compare-vs">vs</span>
-        <select class="compare-sel" onchange="setBioCompare('prev',this.value)">${opts(prev.id)}</select>
-        ${(bioCurId||bioPrevId)?'<button class="link-btn compare-reset" onclick="resetBioCompare()">Latest two</button>':''}
+      `<div class="compare-row">
+        <span class="compare-lbl">Compare</span>
+        <select class="compare-sel" onchange="setCompare('a',this.value)">${opts(cur.id)}</select>
+        <span class="compare-lbl">against</span>
+        <select class="compare-sel" onchange="setCompare('b',this.value)">${opts(prev.id)}</select>
       </div>`);
   } else {
     c.insertAdjacentHTML('beforeend',
-      `<div class="day-sep">Latest panel · ${esc(cur.date)} · no earlier panel to compare</div>`);
+      `<div class="day-sep">Panel · ${esc(cur.date)} · no earlier panel to compare</div>`);
   }
 
   let lastSection=null;
@@ -2123,7 +2153,9 @@ function renderBio(c){
   c.querySelectorAll('[data-pedit]').forEach(b=>b.onclick=()=>openPanelSheet(b.dataset.pedit));
   c.querySelectorAll('[data-pdel]').forEach(b=>b.onclick=()=>{
     const i=PANELS.findIndex(p=>p.id===b.dataset.pdel);
-    if(i>-1&&confirm('Delete the panel from '+PANELS[i].date+'?')){ PANELS.splice(i,1); render(); }
+    if(i>-1&&confirm('Delete the panel from '+PANELS[i].date+'?')){
+      PANELS.splice(i,1); resetCompare(); render();
+    }
   });
 }
 
@@ -2275,11 +2307,11 @@ function openSheet(kind,ref){
 }
 function closeSheet(){ document.getElementById('overlay').classList.remove('open'); editing=null; }
 
-function setBioCompare(which,id){
-  if(which==='cur') bioCurId=id; else bioPrevId=id;
+function setCompare(which,id){
+  if(which==='a') cmpA=id; else cmpB=id;
   render();
 }
-function resetBioCompare(){ bioCurId=null; bioPrevId=null; render(); }
+function resetCompare(){ cmpA=null; cmpB=null; }
 
 function openPanelSheet(id){
   const p=PANELS.find(x=>x.id===id); if(!p) return;
@@ -2326,7 +2358,7 @@ function saveItem(){
       p.label=document.getElementById('f-name').value.trim();
       const dv=document.getElementById('p-date').value;
       if(dv) p.date=dv;
-      PANELS.sort((a,b)=>a.date.localeCompare(b.date));
+      sortPanels(); resetCompare();
     }
     closeSheet(); render(); return;
   }
