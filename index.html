@@ -458,6 +458,17 @@
     box-shadow:0 8px 22px rgba(0,0,0,.45); }
   .drag-shift { transition:transform .16s ease; }
   .sub-count { font-size:12px; color:var(--muted); margin-left:8px; font-weight:600; }
+  /* Inline description preview + expanded panel */
+  .desc-peek { display:flex; align-items:center; gap:6px; margin-top:4px; cursor:pointer;
+    font-size:12px; color:var(--muted); }
+  .desc-caret { color:var(--faint); font-size:10px; flex-shrink:0; }
+  .desc-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .desc-panel { margin:0 6px 10px 43px; padding:10px 12px; border-left:2px solid var(--line);
+    background:var(--surface); border-radius:0 9px 9px 0; }
+  .desc-notes { font-size:13px; color:var(--muted); line-height:1.55; white-space:pre-wrap;
+    margin-bottom:6px; }
+  .desc-item { display:flex; align-items:center; gap:9px; padding:4px 0; font-size:13px; color:var(--ink); }
+  .desc-item.done span { text-decoration:line-through; opacity:.45; }
   .ghost { color:var(--faint); font-style:italic; }
   .task-sec .row { background:var(--bg); }
 
@@ -551,12 +562,6 @@
       <div id="eOnceBox"><div class="field"><input id="e-date" type="date"></div></div>
       <div id="eRepeatBox" style="display:none"><div class="dows" id="edows"></div></div>
 
-      <button id="ev-desc-add" class="td-sched" onclick="openEventDesc()">＋ Add description</button>
-      <div id="ev-desc" style="display:none">
-        <div class="td-sep"></div>
-        <textarea id="ev-notes" class="td-notes" placeholder="Description" rows="1"></textarea>
-        <div id="ev-check"></div>
-      </div>
     </div>
 
     <div id="suppFields" style="display:none">
@@ -601,6 +606,15 @@
       <div class="row2">
         <div class="field"><label>Start time</label><input id="eat-start-in" type="time" value="09:00"></div>
         <div class="field"><label>Duration · hours</label><input id="eat-dur-in" type="number" value="8" min="1" max="16" step="0.5"></div>
+      </div>
+    </div>
+
+    <div id="descBlock" style="display:none">
+      <button id="desc-add" class="td-sched" onclick="openDescEditor()">＋ Add description</button>
+      <div id="desc-body" style="display:none">
+        <div class="td-sep"></div>
+        <textarea id="desc-notes" class="td-notes" placeholder="Description" rows="1"></textarea>
+        <div id="desc-check"></div>
       </div>
     </div>
 
@@ -818,12 +832,13 @@ function sortPanels(){
 function applyBackup(d){
   UNKNOWN_STATE={};
   Object.keys(d||{}).forEach(k=>{ if(!STATE_KEYS.includes(k)) UNKNOWN_STATE[k]=d[k]; });
-  if(Array.isArray(d.ROUTINES)&&d.ROUTINES.length) ROUTINES=d.ROUTINES.map(r=>
-    r.cat==='event'
-      ? {...r, notes: typeof r.notes==='string'?r.notes:'',
-               checklist: Array.isArray(r.checklist)?r.checklist:[]}
-      : r);
-  if(Array.isArray(d.SUPP_BLOCKS)&&d.SUPP_BLOCKS.length) SUPP_BLOCKS=d.SUPP_BLOCKS;
+  // Descriptions are optional everywhere, so default them on load instead of
+  // migrating; an older backup then still imports cleanly.
+  const withDesc=o=>({...o, notes: typeof o.notes==='string'?o.notes:'',
+    checklist: Array.isArray(o.checklist)?o.checklist:[]});
+  if(Array.isArray(d.ROUTINES)&&d.ROUTINES.length) ROUTINES=d.ROUTINES.map(withDesc);
+  if(Array.isArray(d.SUPP_BLOCKS)&&d.SUPP_BLOCKS.length)
+    SUPP_BLOCKS=d.SUPP_BLOCKS.map(b=>({...b, items:(b.items||[]).map(withDesc)}));
   seenDefaults=Array.isArray(d.seenDefaults)?d.seenDefaults:[];
   mergeNewDefaults();
   state=d.state||{}; suppState=d.suppState||{}; optOn=d.optOn||{};
@@ -1558,13 +1573,15 @@ function renderRoutine(c){
       <div class="rbody">
         <div class="rtitle">${esc(r.title)}</div>
         <div class="rmeta"><span class="tag ${r.cat}">${LABEL[r.cat]}</span>
-          <span>${r.time} · ${r.dur} min</span>${r.date?'<span class="tag once">Single</span>':(r.cat==='event'?'<span class="tag once">Repeats</span>':'')}${pill}${streakPill(r)}${countLabel(r.checklist)}</div>
+          <span>${r.time} · ${r.dur} min</span>${r.date?'<span class="tag once">Single</span>':(r.cat==='event'?'<span class="tag once">Repeats</span>':'')}${pill}${streakPill(r)}</div>
+        ${descPeekHTML(r,'r:'+r.id)}
       </div>
       <div class="acts">
         <button class="ico edit" data-edit="${r.id}" aria-label="Edit">✎</button>
         <button class="ico del" data-del="${r.id}" aria-label="Delete">✕</button>
       </div>`;
     c.appendChild(row);
+    c.insertAdjacentHTML('beforeend',descPanelHTML(r,'r:'+r.id));
   });
   c.querySelectorAll('[data-opt]').forEach(x=>x.onclick=e=>{ e.stopPropagation(); toggleOpt(x.dataset.opt); });
   c.querySelectorAll('.check').forEach(x=>x.onclick=()=>{ const m=marks(state); m[x.dataset.id]=!m[x.dataset.id]; render(); });
@@ -1574,6 +1591,7 @@ function renderRoutine(c){
     const i=ROUTINES.indexOf(r);
     deleteWithUndo(r.title, ()=>ROUTINES.splice(i,1), ()=>ROUTINES.splice(i,0,r));
   });
+  bindDescRows(c);
   markFirstOpenRow(c);
 }
 
@@ -1590,13 +1608,15 @@ function renderSupps(c){
       const row=document.createElement('div'); row.className='row'+(done?' done':'');
       row.innerHTML=`
         <div class="check ${done?'on':''}" data-sid="${it.id}"></div>
-        <div class="rbody"><div class="rtitle">${esc(it.name)}</div><div class="rmeta">${esc(it.sub)}</div></div>
+        <div class="rbody"><div class="rtitle">${esc(it.name)}</div><div class="rmeta">${esc(it.sub)}</div>
+          ${descPeekHTML(it,'s:'+block.id+':'+it.id)}</div>
         <span class="dose">${esc(it.dose)}</span>
         <div class="acts">
           <button class="ico edit" data-sedit="${block.id}:${it.id}" aria-label="Edit">✎</button>
           <button class="ico del" data-sdel="${block.id}:${it.id}" aria-label="Delete">✕</button>
         </div>`;
       wrap.appendChild(row);
+      wrap.insertAdjacentHTML('beforeend',descPanelHTML(it,'s:'+block.id+':'+it.id));
     });
     if(block.wait){ const w=document.createElement('div'); w.className='wait-note'; w.textContent='⏱ '+block.wait; wrap.appendChild(w); }
     c.appendChild(wrap);
@@ -1614,6 +1634,7 @@ function renderSupps(c){
     const v=prompt('Time for "'+bl.title+'" (HH:MM)',bl.time);
     if(v&&/^\d{1,2}:\d{2}$/.test(v)){ bl.time=v.length===4?'0'+v:v; render(); }
   });
+  bindDescRows(c);
   markFirstOpenRow(c);
 }
 
@@ -1846,7 +1867,8 @@ function renderAgenda(c){
       row.innerHTML=`<span class="ag-time">${r.time}<small>${r.dur} min</small></span>
         <div class="check ${done?'on':''}${active?'':' plus'}" data-${active?'id':'opt'}="${r.id}"></div>
         <div class="rbody"><div class="rtitle">${esc(r.title)}</div>
-          <div class="rmeta"><span class="tag ${r.cat}">${LABEL[r.cat]}</span>${pill}${streakPill(r)}${countLabel(r.checklist)}</div></div>
+          <div class="rmeta"><span class="tag ${r.cat}">${LABEL[r.cat]}</span>${pill}${streakPill(r)}</div>
+          ${descPeekHTML(r,'r:'+r.id)}</div>
         <div class="acts"><button class="ico edit" data-edit="${r.id}">✎</button></div>`;
     } else if(a.kind==='supp'){
       const b=a.ref, tot=b.items.length, dn=b.items.filter(i=>ms[i.id]).length, all=dn===tot;
@@ -1876,6 +1898,7 @@ function renderAgenda(c){
         ${e.src==='sub'?'':`<div class="acts"><button class="ico del" data-edel="${e.id}">✕</button></div>`}`;
     }
     c.appendChild(row);
+    if(a.kind==='routine') c.insertAdjacentHTML('beforeend',descPanelHTML(a.ref,'r:'+a.ref.id));
   });
   if(nowT && !nowPlaced){
     const n=document.createElement('div'); n.className='now-line'; n.id='scrollAnchor';
@@ -1893,6 +1916,7 @@ function renderAgenda(c){
   c.querySelectorAll('[data-goblk]').forEach(x=>x.onclick=()=>setTab('supps'));
   c.querySelectorAll('[data-edel]').forEach(b=>b.onclick=()=>deleteEventById(b.dataset.edel));
   bindTaskRows(c);
+  bindDescRows(c);
   markFirstOpenRow(c);
 }
 
@@ -2662,17 +2686,29 @@ function clearImports(){ if(confirm('Remove all imported events?')){ IMPORTED=[]
 /* ---------- SHEET ---------- */
 let isOptional=false;
 let eMode='once', eSelDows=[1,2,3,4,5,6,0];
-// A quick event stays two fields until the description is asked for.
-let evDraft={notes:'',checklist:[]};
-function bindEventDesc(){
-  bindNotes(document.getElementById('ev-notes'),evDraft,'notes',()=>{});
-  renderChecklist(document.getElementById('ev-check'),evDraft,'checklist',()=>{});
+// Descriptions are edited into a draft and copied in on Save, so Cancel
+// still discards them. Shared by the routine, event and supplement sheets.
+let descDraft={notes:'',checklist:[]};
+function bindDescEditor(){
+  bindNotes(document.getElementById('desc-notes'),descDraft,'notes',()=>{});
+  renderChecklist(document.getElementById('desc-check'),descDraft,'checklist',()=>{});
 }
-function openEventDesc(){
-  document.getElementById('ev-desc').style.display='block';
-  document.getElementById('ev-desc-add').style.display='none';
-  bindEventDesc();
-  document.getElementById('ev-notes').focus();
+function openDescEditor(){
+  document.getElementById('desc-body').style.display='block';
+  document.getElementById('desc-add').style.display='none';
+  bindDescEditor();
+  document.getElementById('desc-notes').focus();
+}
+// Loads the draft from an existing entry (or blank for a new one) and shows
+// the block collapsed unless there is already something in it.
+function initDescDraft(src){
+  descDraft={notes:(src&&src.notes)||'',
+    checklist:JSON.parse(JSON.stringify((src&&src.checklist)||[]))};
+  const has=!!descDraft.notes||descDraft.checklist.length>0;
+  document.getElementById('descBlock').style.display='block';
+  document.getElementById('desc-body').style.display=has?'block':'none';
+  document.getElementById('desc-add').style.display=has?'none':'block';
+  if(has) bindDescEditor();
 }
 function setEMode(m){
   eMode=m;
@@ -2755,7 +2791,8 @@ function openTaskDetail(id){
   document.getElementById('t-date').value=t.date||dk();
   document.getElementById('t-time').value=t.time||'';
   setTMode(t.date?'date':'none',false);
-  document.getElementById('taskFields').style.display='none';   // collapsed until tapped
+  document.getElementById('taskFields').style.display='none';
+  document.getElementById('descBlock').style.display='none';   // collapsed until tapped
   syncSchedLine();
 
   document.getElementById('t-date').onchange=()=>{ applySchedule(); };
@@ -2871,6 +2908,59 @@ function bindNotes(el,owner,field,onChange){
   setTimeout(grow,0);
 }
 
+/* ---------- INLINE DESCRIPTIONS ----------
+   A row with notes or checklist items shows a one-line preview; tapping it
+   expands the full text and lets the items be ticked without opening the
+   edit sheet. Open rows are tracked by reference so the state survives the
+   re-render that ticking triggers. */
+let descOpen=new Set();
+
+const hasDesc=o=>!!(o&&((o.notes&&o.notes.trim())||(o.checklist&&o.checklist.length)));
+function descPreview(o){
+  const t=String(o.notes||'').trim().replace(/\s+/g,' ');
+  if(t) return t.length>62?t.slice(0,62)+'…':t;
+  return (o.checklist||[]).length+' item'+((o.checklist||[]).length===1?'':'s');
+}
+// ref addresses the owner across renders: r:<id> or s:<blockId>:<itemId>
+function descOwner(ref){
+  const p=String(ref).split(':');
+  if(p[0]==='r') return ROUTINES.find(x=>x.id===p[1]);
+  if(p[0]==='s'){ const b=SUPP_BLOCKS.find(x=>x.id===p[1]); return b&&b.items.find(i=>i.id===p[2]); }
+  return null;
+}
+function descPeekHTML(o,ref){
+  if(!hasDesc(o)) return '';
+  const open=descOpen.has(ref);
+  return `<div class="desc-peek" data-desc="${ref}">
+    <span class="desc-caret">${open?'▾':'▸'}</span>
+    <span class="desc-text">${esc(descPreview(o))}</span>${countLabel(o.checklist)}</div>`;
+}
+function descPanelHTML(o,ref){
+  if(!hasDesc(o)||!descOpen.has(ref)) return '';
+  const notes=String(o.notes||'').trim();
+  const items=(o.checklist||[]).map(c=>
+    `<div class="desc-item${c.done?' done':''}">
+      <button class="sub-check ${c.done?'on':''}" data-dck="${ref}" data-dckid="${c.id}"></button>
+      <span>${esc(c.title)}</span>
+    </div>`).join('');
+  return `<div class="desc-panel">${notes?`<div class="desc-notes">${esc(notes)}</div>`:''}${items}</div>`;
+}
+function bindDescRows(c){
+  c.querySelectorAll('[data-desc]').forEach(el=>el.onclick=ev=>{
+    ev.stopPropagation();
+    const ref=el.dataset.desc;
+    descOpen.has(ref)?descOpen.delete(ref):descOpen.add(ref);
+    render();
+  });
+  c.querySelectorAll('[data-dck]').forEach(el=>el.onclick=ev=>{
+    ev.stopPropagation();
+    const o=descOwner(el.dataset.dck); if(!o) return;
+    const item=(o.checklist||[]).find(x=>x.id===el.dataset.dckid); if(!item) return;
+    item.done=!item.done;
+    render();
+  });
+}
+
 const countLabel=(list)=>{
   const n=(list||[]).length;
   return n?`<span class="sub-count">${list.filter(s=>s.done).length}/${n}</span>`:'';
@@ -2916,6 +3006,7 @@ function openSheet(kind,ref){
     if(r&&r.date){ setMode('once'); selDows=[0,1,2,3,4,5,6]; }
     else { setMode('repeat'); selDows=r&&r.days?[...r.days]:[0,1,2,3,4,5,6]; }
     renderDows();
+    initDescDraft(r);
   } else if(sheetType==='event'){
     const r=editing?ROUTINES.find(x=>x.id===editing):null;
     document.getElementById('f-name').value=r?r.title:'';
@@ -2925,12 +3016,7 @@ function openSheet(kind,ref){
     if(r && !r.date){ eSelDows=r.days?[...r.days]:[1,2,3,4,5,6,0]; setEMode('repeat'); }
     else { eSelDows=[1,2,3,4,5,6,0]; setEMode('once'); }
     renderEDows();
-    // Edited into a draft, not the entry itself, so Cancel still discards.
-    evDraft={notes:(r&&r.notes)||'', checklist:JSON.parse(JSON.stringify((r&&r.checklist)||[]))};
-    const hasDesc=!!evDraft.notes||evDraft.checklist.length>0;
-    document.getElementById('ev-desc').style.display=hasDesc?'block':'none';
-    document.getElementById('ev-desc-add').style.display=hasDesc?'none':'block';
-    if(hasDesc) bindEventDesc();
+    initDescDraft(r);
   } else {
     const sel=document.getElementById('f-block');
     sel.innerHTML=SUPP_BLOCKS.map(b=>`<option value="${b.id}">${esc(b.title)}</option>`).join('');
@@ -2941,7 +3027,11 @@ function openSheet(kind,ref){
       document.getElementById('f-sub').value=it.sub==='—'?'':it.sub;
       document.getElementById('f-dose').value=it.dose==='—'?'':it.dose;
       sel.value=bid;
-    } else { ['f-name','f-sub','f-dose'].forEach(i=>document.getElementById(i).value=''); }
+      initDescDraft(it);
+    } else {
+      ['f-name','f-sub','f-dose'].forEach(i=>document.getElementById(i).value='');
+      initDescDraft(null);
+    }
   }
   document.getElementById('overlay').classList.add('open');
 }
@@ -3046,8 +3136,8 @@ function saveItem(){
       data.date=undefined;
       data.days=eSelDows.length===7?undefined:[...eSelDows].sort((a,b)=>a-b);
     }
-    data.notes=evDraft.notes||'';
-    data.checklist=evDraft.checklist||[];
+    data.notes=descDraft.notes||'';
+    data.checklist=descDraft.checklist||[];
     if(editing) Object.assign(ROUTINES.find(r=>r.id===editing),data);
     else ROUTINES.push({id:'e'+Date.now(),...data});
     if(data.date){                                   // zum Datum springen
@@ -3063,12 +3153,14 @@ function saveItem(){
       cat:document.getElementById('f-cat').value, optional:isOptional};
     if(mode==='once'){ data.date=document.getElementById('f-date').value||dk(); data.days=undefined; }
     else { data.date=undefined; data.days=selDows.length===7?undefined:[...selDows].sort(); }
+    data.notes=descDraft.notes||''; data.checklist=descDraft.checklist||[];
     if(editing) Object.assign(ROUTINES.find(r=>r.id===editing),data);
     else ROUTINES.push({id:'c'+Date.now(),...data});
   } else {
     const bid=document.getElementById('f-block').value;
     const data={name,sub:document.getElementById('f-sub').value.trim()||'—',
-      dose:document.getElementById('f-dose').value.trim()||'—'};
+      dose:document.getElementById('f-dose').value.trim()||'—',
+      notes:descDraft.notes||'', checklist:descDraft.checklist||[]};
     if(editing){
       const [obid,iid]=editing.split(':');
       const ob=SUPP_BLOCKS.find(b=>b.id===obid);
