@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- Zoom is switched off deliberately: the layout is already phone-width, and
+     a stray pinch or a double-tap on a checkbox would otherwise leave the whole
+     page magnified. iOS honours this in a home-screen app; plain Safari ignores
+     user-scalable and still allows pinch, which is the accessibility escape hatch. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <!-- "black", not "black-translucent": translucent makes iOS lay the app out
      underneath the status bar, so the header's top was hidden behind the
@@ -31,7 +35,10 @@
   html,body { background-color:#14201d; background-color:var(--bg);
     color:#ece7d6; color:var(--ink); }
   body { min-height:100vh; min-height:100dvh; overscroll-behavior-y:none;
-    -webkit-text-size-adjust:100%; }
+    -webkit-text-size-adjust:100%;
+    /* Kills the double-tap-to-zoom gesture while leaving scrolling alone. The
+       drag handles override this with touch-action:none of their own. */
+    touch-action:manipulation; }
   body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
     max-width:640px; margin:0 auto; min-height:100vh; }
