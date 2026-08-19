@@ -550,6 +550,13 @@
       </div>
       <div id="eOnceBox"><div class="field"><input id="e-date" type="date"></div></div>
       <div id="eRepeatBox" style="display:none"><div class="dows" id="edows"></div></div>
+
+      <button id="ev-desc-add" class="td-sched" onclick="openEventDesc()">＋ Add description</button>
+      <div id="ev-desc" style="display:none">
+        <div class="td-sep"></div>
+        <textarea id="ev-notes" class="td-notes" placeholder="Description" rows="1"></textarea>
+        <div id="ev-check"></div>
+      </div>
     </div>
 
     <div id="suppFields" style="display:none">
@@ -752,19 +759,38 @@ const DB_KEY='zeus.protocol.v2';
 const APP_VERSION='1.0';
 let canPersist=true, lastSaveOk=null;
 
-function backupData(){
+// Keys this build knows about. Anything else found in a saved payload is a
+// key from a newer version: kept in UNKNOWN_STATE and written back out, so
+// downgrading and re-upgrading does not silently drop data.
+const STATE_KEYS=['v','schema','exportedAt','appVersion','ROUTINES','SUPP_BLOCKS','state',
+  'suppState','optOn','PANELS','seenDefaults','IMPORTED','SUBS','SUB_URL','SUB_PROXY',
+  'SUB_MINUTES','EAT_START','EAT_END','TASKS'];
+let UNKNOWN_STATE={};
+
+/* The single source of truth for what gets persisted. saveAll() writes this,
+   and the backup export writes this plus its own metadata, so a new key added
+   here reaches both without touching the export.
+
+   Deliberately excluded, all reconstructed at runtime:
+     - SUBS[].events   re-fetched from the feed on every load
+     - status/msg/busy flags   in-flight UI state, meaningless once reloaded
+     - undoPending     a 5-second buffer; restoring it would be nonsense
+     - view state (activeTab, viewDate, calMode, scroll positions, sheet
+       state, cmpA/cmpB)   where the user was, not what they own */
+function collectState(){
   return {
-    v:2, ROUTINES, SUPP_BLOCKS, state, suppState, optOn, PANELS, seenDefaults,
+    ...UNKNOWN_STATE,
+    v:2, ROUTINES, SUPP_BLOCKS, state, suppState, optOn, PANELS, seenDefaults, TASKS,
     IMPORTED: IMPORTED.map(e=>({...e,start:e.start.toISOString()})),
     SUBS: SUBS.map(s=>({id:s.id,url:s.url,name:s.name,color:s.color,status:s.status,msg:s.msg,
       last:s.last?new Date(s.last).toISOString():null})),
-    SUB_PROXY, SUB_MINUTES, EAT_START, EAT_END, TASKS
+    SUB_PROXY, SUB_MINUTES, EAT_START, EAT_END
   };
 }
 function saveAll(){
   if(!canPersist) return;
   try{
-    localStorage.setItem(DB_KEY, JSON.stringify(backupData()));
+    localStorage.setItem(DB_KEY, JSON.stringify(collectState()));
     lastSaveOk=true;
   }catch(e){ canPersist=false; lastSaveOk=false; }
 }
@@ -790,7 +816,13 @@ function sortPanels(){
 }
 
 function applyBackup(d){
-  if(Array.isArray(d.ROUTINES)&&d.ROUTINES.length) ROUTINES=d.ROUTINES;
+  UNKNOWN_STATE={};
+  Object.keys(d||{}).forEach(k=>{ if(!STATE_KEYS.includes(k)) UNKNOWN_STATE[k]=d[k]; });
+  if(Array.isArray(d.ROUTINES)&&d.ROUTINES.length) ROUTINES=d.ROUTINES.map(r=>
+    r.cat==='event'
+      ? {...r, notes: typeof r.notes==='string'?r.notes:'',
+               checklist: Array.isArray(r.checklist)?r.checklist:[]}
+      : r);
   if(Array.isArray(d.SUPP_BLOCKS)&&d.SUPP_BLOCKS.length) SUPP_BLOCKS=d.SUPP_BLOCKS;
   seenDefaults=Array.isArray(d.seenDefaults)?d.seenDefaults:[];
   mergeNewDefaults();
@@ -865,7 +897,8 @@ function wipeAll(){
 }
 
 function exportBackup(){
-  const data={...backupData(), exportedAt:new Date().toISOString(), appVersion:APP_VERSION};
+  const data={...collectState(), exportedAt:new Date().toISOString(),
+    appVersion:APP_VERSION, schema:2};
   download(JSON.stringify(data,null,2), 'zeus-backup-'+key(new Date())+'.json', 'application/json;charset=utf-8');
 }
 
@@ -877,19 +910,35 @@ document.getElementById('backupInput').addEventListener('change',e=>{
     let data;
     try{ data=JSON.parse(rd.result); }
     catch(err){ alert('That file is not valid JSON.'); return; }
-    if(!data || typeof data!=='object' || !Array.isArray(data.ROUTINES) || !Array.isArray(data.SUPP_BLOCKS)){
-      alert('That file does not look like a Zeus Protocol backup — it is missing routines or supplements.');
+    // A backup only has to be recognisable, not complete: one restored after a
+    // reinstall may predate half these keys, and applyBackup fills the gaps.
+    const looksRight = data && typeof data==='object' &&
+      ['ROUTINES','SUPP_BLOCKS','TASKS','PANELS','state'].some(k=>k in data);
+    if(!looksRight){
+      alert('That file does not look like a Zeus Protocol backup.');
       return;
     }
-    const when=data.exportedAt?new Date(data.exportedAt).toLocaleString():'unknown date';
+    const n=(v)=>Array.isArray(v)?v.length:0;
+    const plural=(c,w)=>c+' '+w+(c===1?'':'s');
     const counts=[
-      data.ROUTINES.length+' routine'+(data.ROUTINES.length===1?'':'s'),
-      data.SUPP_BLOCKS.length+' supplement block'+(data.SUPP_BLOCKS.length===1?'':'s')
-    ];
-    if(Array.isArray(data.PANELS)) counts.push(data.PANELS.length+' blood panel'+(data.PANELS.length===1?'':'s'));
-    if(Array.isArray(data.SUBS)) counts.push(data.SUBS.length+' calendar subscription'+(data.SUBS.length===1?'':'s'));
-    if(!confirm('Replace all current data with this backup?\n\nExported: '+when+'\n'+counts.join(', ')+'\n\nThis cannot be undone.')) return;
-    applyBackup(data);
+      plural(n(data.ROUTINES),'routine'),
+      plural(n(data.SUPP_BLOCKS),'supplement block'),
+      plural(n(data.TASKS),'task'),
+      plural(n(data.PANELS),'blood panel'),
+      plural(n(data.SUBS),'calendar'),
+      plural(n(data.IMPORTED),'imported event')
+    ].filter(x=>!x.startsWith('0 '));
+    const when=data.exportedAt?new Date(data.exportedAt).toLocaleString():'unknown date';
+    if(!confirm('Replace all current data with this backup?\n\nExported: '+when+'\n'
+      +(counts.length?counts.join(', '):'no entries')+'\n\nThis cannot be undone.')) return;
+    try{
+      applyBackup(data);
+    }catch(err){
+      alert('That backup could not be read, so nothing was changed.');
+      loadAll();          // put the previous state back
+      render();
+      return;
+    }
     saveAll();
     render();
     if(SUBS.length){ startSubTimer(); subFetchAll(true); }
@@ -1509,7 +1558,7 @@ function renderRoutine(c){
       <div class="rbody">
         <div class="rtitle">${esc(r.title)}</div>
         <div class="rmeta"><span class="tag ${r.cat}">${LABEL[r.cat]}</span>
-          <span>${r.time} · ${r.dur} min</span>${r.date?'<span class="tag once">Single</span>':(r.cat==='event'?'<span class="tag once">Repeats</span>':'')}${pill}${streakPill(r)}</div>
+          <span>${r.time} · ${r.dur} min</span>${r.date?'<span class="tag once">Single</span>':(r.cat==='event'?'<span class="tag once">Repeats</span>':'')}${pill}${streakPill(r)}${countLabel(r.checklist)}</div>
       </div>
       <div class="acts">
         <button class="ico edit" data-edit="${r.id}" aria-label="Edit">✎</button>
@@ -1701,10 +1750,7 @@ function clearCompleted(){
   render();
 }
 
-const subCount=t=>{
-  const n=(t.subtasks||[]).length;
-  return n?`<span class="sub-count">${t.subtasks.filter(s=>s.done).length}/${n}</span>`:'';
-};
+const subCount=t=>countLabel(t.subtasks);
 
 function taskRow(t,draggable){
   const row=document.createElement('div');
@@ -1800,7 +1846,7 @@ function renderAgenda(c){
       row.innerHTML=`<span class="ag-time">${r.time}<small>${r.dur} min</small></span>
         <div class="check ${done?'on':''}${active?'':' plus'}" data-${active?'id':'opt'}="${r.id}"></div>
         <div class="rbody"><div class="rtitle">${esc(r.title)}</div>
-          <div class="rmeta"><span class="tag ${r.cat}">${LABEL[r.cat]}</span>${pill}${streakPill(r)}</div></div>
+          <div class="rmeta"><span class="tag ${r.cat}">${LABEL[r.cat]}</span>${pill}${streakPill(r)}${countLabel(r.checklist)}</div></div>
         <div class="acts"><button class="ico edit" data-edit="${r.id}">✎</button></div>`;
     } else if(a.kind==='supp'){
       const b=a.ref, tot=b.items.length, dn=b.items.filter(i=>ms[i.id]).length, all=dn===tot;
@@ -2616,6 +2662,18 @@ function clearImports(){ if(confirm('Remove all imported events?')){ IMPORTED=[]
 /* ---------- SHEET ---------- */
 let isOptional=false;
 let eMode='once', eSelDows=[1,2,3,4,5,6,0];
+// A quick event stays two fields until the description is asked for.
+let evDraft={notes:'',checklist:[]};
+function bindEventDesc(){
+  bindNotes(document.getElementById('ev-notes'),evDraft,'notes',()=>{});
+  renderChecklist(document.getElementById('ev-check'),evDraft,'checklist',()=>{});
+}
+function openEventDesc(){
+  document.getElementById('ev-desc').style.display='block';
+  document.getElementById('ev-desc-add').style.display='none';
+  bindEventDesc();
+  document.getElementById('ev-notes').focus();
+}
 function setEMode(m){
   eMode=m;
   document.getElementById('eseg-once').classList.toggle('on',m==='once');
@@ -2692,10 +2750,7 @@ function openTaskDetail(id){
   title.value=t.title;
   title.oninput=()=>{ t.title=title.value; saveAll(); };
 
-  const notes=document.getElementById('td-notes');
-  notes.value=t.notes||'';
-  const grow=()=>{ notes.style.height='auto'; notes.style.height=notes.scrollHeight+'px'; };
-  notes.oninput=()=>{ t.notes=notes.value; grow(); saveAll(); };
+  bindNotes(document.getElementById('td-notes'),t,'notes');
 
   document.getElementById('t-date').value=t.date||dk();
   document.getElementById('t-time').value=t.time||'';
@@ -2708,7 +2763,6 @@ function openTaskDetail(id){
 
   renderSubtasks();
   document.getElementById('overlay').classList.add('open');
-  setTimeout(grow,0);
   if(!t.title) setTimeout(()=>title.focus(),50);
 }
 
@@ -2747,59 +2801,84 @@ function discardEmptyTask(id){
   if(!String(t.title||'').trim() && !(t.subtasks||[]).length) TASKS.splice(i,1);
 }
 
-function renderSubtasks(){
-  const t=currentTask(), box=document.getElementById('td-subs');
-  if(!t||!box) return;
-  // Ticked items sink below the open ones, keeping their relative order.
-  const subs=[...(t.subtasks||[])];
-  box.innerHTML=subs.map(s=>`
+/* Shared notes + checklist renderer, used by both the task detail view and
+   the event sheet. Kept in one place deliberately: two copies of the drag,
+   sink-on-done and add-row behaviour would drift apart.
+   `owner` is the object holding the data; `field` names its array. */
+function renderChecklist(box,owner,field,onChange){
+  if(!box||!owner) return;
+  const list=owner[field]||(owner[field]=[]);
+  const commit=()=>{ (onChange||saveAll)(); renderChecklist(box,owner,field,onChange); };
+
+  box.innerHTML=list.map(s=>`
     <div class="sub-item${s.done?' done':''}" data-item="${s.id}">
-      <button class="sub-check ${s.done?'on':''}" data-sub="${s.id}"></button>
-      <input class="sub-input" value="${esc(s.title)}" data-subtitle="${s.id}" placeholder="Item">
+      <button class="sub-check ${s.done?'on':''}" data-ck="${s.id}"></button>
+      <input class="sub-input" value="${esc(s.title)}" data-cktitle="${s.id}" placeholder="Item">
       <button class="drag-handle" data-drag title="Reorder" aria-label="Reorder">⋮⋮</button>
-      <button class="sub-del" data-subdel="${s.id}">✕</button>
+      <button class="sub-del" data-ckdel="${s.id}">✕</button>
     </div>`).join('')
     +`<div class="sub-item">
         <button class="sub-check" style="visibility:hidden"></button>
-        <input class="sub-input" id="subAdd" placeholder="Add item">
+        <input class="sub-input cl-add" placeholder="Add item">
       </div>`;
 
-  box.querySelectorAll('[data-sub]').forEach(el=>el.onclick=()=>{
-    const s=t.subtasks.find(x=>x.id===el.dataset.sub); if(!s) return;
+  box.querySelectorAll('[data-ck]').forEach(el=>el.onclick=()=>{
+    const s=list.find(x=>x.id===el.dataset.ck); if(!s) return;
     s.done=!s.done;
-    sinkDoneSubtasks(t);
-    saveAll(); renderSubtasks();
+    sinkDone(owner,field);
+    commit();
   });
-  box.querySelectorAll('[data-subtitle]').forEach(el=>el.oninput=()=>{
-    const s=t.subtasks.find(x=>x.id===el.dataset.subtitle); if(s){ s.title=el.value; saveAll(); }
+  box.querySelectorAll('[data-cktitle]').forEach(el=>el.oninput=()=>{
+    const s=list.find(x=>x.id===el.dataset.cktitle);
+    if(s){ s.title=el.value; (onChange||saveAll)(); }   // no re-render: it would drop the caret
   });
-  box.querySelectorAll('[data-subdel]').forEach(el=>el.onclick=()=>{
-    const i=t.subtasks.findIndex(x=>x.id===el.dataset.subdel); if(i<0) return;
-    const s=t.subtasks[i];
+  box.querySelectorAll('[data-ckdel]').forEach(el=>el.onclick=()=>{
+    const i=list.findIndex(x=>x.id===el.dataset.ckdel); if(i<0) return;
+    const s=list[i];
     deleteWithUndo(s.title||'Item',
-      ()=>{ t.subtasks.splice(i,1); renderSubtasks(); },
-      ()=>{ t.subtasks.splice(i,0,s); renderSubtasks(); });
+      ()=>{ list.splice(i,1); commit(); },
+      ()=>{ list.splice(i,0,s); commit(); });
   });
 
-  const add=document.getElementById('subAdd');
+  const add=box.querySelector('.cl-add');
   if(add) add.onkeydown=e=>{
     if(e.key!=='Enter') return;
     e.preventDefault();
     const v=add.value.trim(); if(!v) return;
-    t.subtasks.push({id:'s'+Date.now()+Math.floor(Math.random()*1000),title:v,done:false});
-    sinkDoneSubtasks(t);
-    saveAll(); renderSubtasks();
-    const nxt=document.getElementById('subAdd'); if(nxt) nxt.focus();   // keep typing
+    list.push({id:'s'+Date.now()+Math.floor(Math.random()*1000),title:v,done:false});
+    sinkDone(owner,field);
+    commit();
+    const nxt=box.querySelector('.cl-add'); if(nxt) nxt.focus();   // keep typing
   };
 
   makeReorderable(box,ids=>{
-    const map={}; t.subtasks.forEach(s=>map[s.id]=s);
-    t.subtasks=ids.map(id=>map[id]).filter(Boolean);
-    saveAll(); renderSubtasks();
+    const map={}; list.forEach(s=>map[s.id]=s);
+    owner[field]=ids.map(id=>map[id]).filter(Boolean);
+    commit();
   });
 }
-function sinkDoneSubtasks(t){
-  t.subtasks=[...t.subtasks.filter(s=>!s.done), ...t.subtasks.filter(s=>s.done)];
+function sinkDone(owner,field){
+  const l=owner[field]||[];
+  owner[field]=[...l.filter(s=>!s.done),...l.filter(s=>s.done)];
+}
+
+// Binds an auto-growing notes textarea to owner[field].
+function bindNotes(el,owner,field,onChange){
+  if(!el||!owner) return;
+  el.value=owner[field]||'';
+  const grow=()=>{ el.style.height='auto'; el.style.height=el.scrollHeight+'px'; };
+  el.oninput=()=>{ owner[field]=el.value; grow(); (onChange||saveAll)(); };
+  setTimeout(grow,0);
+}
+
+const countLabel=(list)=>{
+  const n=(list||[]).length;
+  return n?`<span class="sub-count">${list.filter(s=>s.done).length}/${n}</span>`:'';
+};
+
+function renderSubtasks(){
+  const t=currentTask();
+  renderChecklist(document.getElementById('td-subs'),t,'subtasks');
 }
 
 function openSheet(kind,ref){
@@ -2846,6 +2925,12 @@ function openSheet(kind,ref){
     if(r && !r.date){ eSelDows=r.days?[...r.days]:[1,2,3,4,5,6,0]; setEMode('repeat'); }
     else { eSelDows=[1,2,3,4,5,6,0]; setEMode('once'); }
     renderEDows();
+    // Edited into a draft, not the entry itself, so Cancel still discards.
+    evDraft={notes:(r&&r.notes)||'', checklist:JSON.parse(JSON.stringify((r&&r.checklist)||[]))};
+    const hasDesc=!!evDraft.notes||evDraft.checklist.length>0;
+    document.getElementById('ev-desc').style.display=hasDesc?'block':'none';
+    document.getElementById('ev-desc-add').style.display=hasDesc?'none':'block';
+    if(hasDesc) bindEventDesc();
   } else {
     const sel=document.getElementById('f-block');
     sel.innerHTML=SUPP_BLOCKS.map(b=>`<option value="${b.id}">${esc(b.title)}</option>`).join('');
@@ -2961,6 +3046,8 @@ function saveItem(){
       data.date=undefined;
       data.days=eSelDows.length===7?undefined:[...eSelDows].sort((a,b)=>a-b);
     }
+    data.notes=evDraft.notes||'';
+    data.checklist=evDraft.checklist||[];
     if(editing) Object.assign(ROUTINES.find(r=>r.id===editing),data);
     else ROUTINES.push({id:'e'+Date.now(),...data});
     if(data.date){                                   // zum Datum springen
