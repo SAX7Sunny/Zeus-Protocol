@@ -94,7 +94,9 @@
   .progress-wrap { margin-top:12px; }
   .status-head { display:flex; justify-content:space-between; align-items:flex-end; gap:14px; margin-bottom:7px; }
   .status-left { display:flex; align-items:baseline; gap:6px; min-width:0; }
-  .status-right { text-align:right; min-width:0; cursor:pointer; }
+  /* Sits under the eating-window bar, so each bar keeps its own caption. */
+  .eat-line { margin-top:5px; cursor:pointer; }
+  .eat-row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
   .pct { font-size:24px; font-weight:600; color:var(--moss); line-height:1; }
   .pct-sub { font-size:12.5px; color:var(--muted); }
   .progress-track { height:6px; background:rgba(236,231,214,.10); border-radius:4px; overflow:hidden;
@@ -380,7 +382,7 @@
   .streak-pill.zero { color:var(--faint); background:rgba(236,231,214,.07); font-weight:600; }
 
 
-  .eat-label { font-weight:700; display:block; }
+  .eat-label { font-weight:700; }
   .eat-left { font-size:12.5px; font-weight:700; white-space:nowrap; }
   .eat-sub { color:var(--faint); font-weight:600; display:block; margin-top:2px; }
   .eat-track { height:6px; background:rgba(236,231,214,.10); border-radius:4px; overflow:hidden; }
@@ -532,10 +534,10 @@
   <div class="progress-wrap" id="progWrap">
     <div class="status-head">
       <div class="status-left"><span class="pct" id="pct">0%</span><span class="pct-sub">done</span></div>
-      <div class="status-right" id="eatHead" onclick="openEatSheet()"></div>
     </div>
     <div class="progress-track"><div class="progress-bar" id="bar"></div></div>
     <div class="eat-track" id="eatTrack"><div class="eat-fill" id="eatFill"></div></div>
+    <div class="eat-line" id="eatHead" onclick="openEatSheet()"></div>
   </div>
   <div class="tabs-wrap" id="tabsWrap">
     <div class="tabs" id="tabs">
@@ -1266,8 +1268,10 @@ function renderEatWindow(){
   const st=eatingState(now);
   wrap.classList.add(st.mode==='eating'?'eat-eating':'eat-fasting');
   head.innerHTML=`
-    <span class="eat-label">${st.mode==='eating'?'Eating window':'Fasting'}</span>
-    <span class="eat-left">${hm(st.left)} ${st.mode==='eating'?'left':'until '+hoursToHHMM(EAT_START)}</span>
+    <div class="eat-row">
+      <span class="eat-label">${st.mode==='eating'?'Eating window':'Fasting'}</span>
+      <span class="eat-left">${hm(st.left)} ${st.mode==='eating'?'left':'until '+hoursToHHMM(EAT_START)}</span>
+    </div>
     <span class="eat-sub">${hoursToHHMM(EAT_START)} – ${hoursToHHMM(EAT_END)} · tap to edit</span>`;
   document.getElementById('eatFill').style.width=Math.max(0,Math.min(100,st.pct))+'%';
 }
