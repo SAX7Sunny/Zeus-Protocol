@@ -29,7 +29,27 @@
     --frost:#6fc4d8; --frost-soft:rgba(111,196,216,0.16);
     --moss:#8fce8a; --clay:#e89b6c; --clay-soft:rgba(232,155,108,0.16);
     --amber:#d4bd6e; --rose:#e88a8a; --rose-soft:rgba(232,138,138,0.14);
+    /* Third type role. Georgia carries headings, the system sans carries
+       prose, and this carries anything the eye scans down a column. System
+       stack only — no web font, the file stays self-contained. */
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
   }
+
+  /* Data face: every value that has to line up vertically. tabular-nums is
+     the point — without it a 1 is narrower than a 7 and columns wander. */
+  .pct, .ag-time, .ag-time small, .row-time, .dose, .sub-count, .task-when,
+  .streak-pill, .eat-left, .eat-sub, .block-time,
+  .mk-val, .mk-val small, .mk-delta, .mk-sub,
+  .md-val, .md-unit, .md-delta, .md-date, .md-reading, .md-chg, .md-point,
+  .day-hour, .db-time, .cell .num, .wk-daynum, .wk-label,
+  .panel-date, .panel-meta, .compare-sel {
+    font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+  /* Micro-labels: section headings and tags, unified. */
+  .eat-label, .opt-pill, .tag, .day-sep, .seclabel, .md-sec, .eat-sub {
+    font-family:var(--mono); font-size:10.5px; letter-spacing:.14em;
+    text-transform:uppercase; }
+  .wdays div, .wgrid-head div { font-family:var(--mono); }
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html { background-color:#14201d; min-height:100%; }
   html,body { background-color:#14201d; background-color:var(--bg);
@@ -61,7 +81,7 @@
     border:1px solid var(--line); background:var(--surface);
   }
   .eyebrow { font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--frost); font-weight:600; }
-  h1 { font-family:Georgia,"Times New Roman",serif; font-size:24px; font-weight:600; line-height:1.1; margin-top:6px; }
+  h1 { font-family:Georgia,"Times New Roman",serif; font-size:24px; font-weight:600; line-height:1.25; margin-top:6px; }
 
   .daynav { display:flex; align-items:center; gap:10px; margin-top:8px; }
   .daynav button { background:var(--surface); border:1px solid var(--line); color:var(--ink);
@@ -69,11 +89,16 @@
   .daynav .dlabel { flex:1; font-size:14px; color:var(--muted); }
   .daynav .today-btn { width:auto; padding:0 12px; font-size:12px; font-weight:600; color:var(--frost); }
 
+  /* One status block: the day's percentage and the eating window read
+     together, with their two bars stacked directly beneath. */
   .progress-wrap { margin-top:12px; }
-  .progress-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
-  .pct { font-family:Georgia,serif; font-size:22px; font-weight:600; color:var(--moss); }
-  .pct-sub { font-size:12px; color:var(--muted); }
-  .progress-track { height:6px; background:rgba(236,231,214,.10); border-radius:4px; overflow:hidden; }
+  .status-head { display:flex; justify-content:space-between; align-items:flex-end; gap:14px; margin-bottom:7px; }
+  .status-left { display:flex; align-items:baseline; gap:6px; min-width:0; }
+  .status-right { text-align:right; min-width:0; cursor:pointer; }
+  .pct { font-size:24px; font-weight:600; color:var(--moss); line-height:1; }
+  .pct-sub { font-size:12.5px; color:var(--muted); }
+  .progress-track { height:6px; background:rgba(236,231,214,.10); border-radius:4px; overflow:hidden;
+    margin-bottom:3px; }
   .progress-bar { height:100%; width:0%; background:var(--moss); border-radius:4px; transition:width .4s ease; }
 
   /* Six tabs no longer fit at a readable size, so the bar scrolls sideways
@@ -100,21 +125,21 @@
 
   main { padding:4px 14px 96px; }   /* bottom clears the floating + button */
   .tab-actions { display:flex; gap:8px; flex-wrap:wrap; padding:2px 6px 12px; }
-  .task-when { font-size:12px; color:var(--frost); margin-top:3px; }
+  .task-when { font-size:12.5px; line-height:1.5; color:var(--frost); margin-top:3px; }
   .task-when.overdue { color:var(--rose); }
   .tasks-done-head { cursor:pointer; }
   .tag.task { color:var(--amber); }
 
-  .row { display:flex; align-items:center; gap:11px; padding:14px 6px; border-bottom:1px solid var(--line); }
+  .row { display:flex; align-items:center; gap:11px; padding:13px 6px; border-bottom:1px solid var(--line); }
   .check { flex-shrink:0; width:26px; height:26px; border-radius:50%;
     border:2px solid rgba(236,231,214,.35); display:grid; place-items:center; transition:all .2s; }
   .check.on { background:var(--moss); border-color:var(--moss); }
   .check.on::after { content:"✓"; color:var(--bg); font-size:15px; font-weight:800; }
   .rbody { flex:1; min-width:0; }
-  .rtitle { font-size:15.5px; font-weight:600; line-height:1.3; }
+  .rtitle { font-size:15.5px; font-weight:600; line-height:1.25; }
   .row.done .rtitle { text-decoration:line-through; opacity:.45; }
-  .rmeta { font-size:12.5px; color:var(--muted); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  .tag { font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; font-weight:700; }
+  .rmeta { font-size:12.5px; line-height:1.5; color:var(--muted); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .tag { font-weight:700; }
   .tag.health{color:var(--frost);} .tag.sport{color:var(--clay);}
   .tag.mental{color:var(--moss);} .tag.planning{color:var(--amber);}
   .tag.imported{color:var(--frost);} .tag.event{color:var(--frost);} .tag.once{color:var(--amber);}
@@ -151,8 +176,7 @@
   .import-status { margin-top:10px; font-size:12.5px; color:var(--moss); font-weight:600; }
 
   .agenda-time { flex-shrink:0; width:52px; font-size:13px; font-weight:700; color:var(--frost); }
-  .day-sep { font-family:Georgia,serif; font-size:13px; color:var(--muted);
-    padding:16px 6px 6px; letter-spacing:.04em; text-transform:uppercase; }
+  .day-sep { color:var(--faint); padding:16px 6px 6px; }
 
   /* Undo toast — sits above the floating + button, not under it. */
   .undo-toast { position:fixed; left:50%; transform:translateX(-50%);
@@ -308,7 +332,7 @@
   .row.opt-off { opacity:.40; }
   .row.opt-off .check { border-style:dashed; border-color:rgba(236,231,214,.45); }
   .check.plus::after { content:"+"; color:var(--muted); font-size:18px; font-weight:600; line-height:1; }
-  .opt-pill { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+  .opt-pill { font-weight:700;
     color:var(--amber); background:rgba(212,189,110,.15); border:none;
     padding:3px 8px; border-radius:6px; }
   .opt-pill.off { color:var(--muted); background:rgba(236,231,214,.08); }
@@ -334,15 +358,15 @@
   .upload-zone h3 { font-family:Georgia,serif; font-size:17px; margin-bottom:5px; }
   .upload-zone p { font-size:12.5px; color:var(--muted); line-height:1.5; margin-bottom:14px; }
 
-  .mk { display:flex; align-items:center; gap:10px; padding:12px 6px; border-bottom:1px solid var(--line); cursor:pointer; }
-  .mk-name { flex:1; min-width:0; font-size:14.5px; font-weight:600; }
-  .mk-sub { font-size:11.5px; color:var(--faint); margin-top:2px; }
-  .mk-val { flex-shrink:0; font-size:14.5px; font-weight:700; text-align:right; min-width:74px; }
+  .mk { display:flex; align-items:center; gap:10px; padding:13px 6px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .mk-name { flex:1; min-width:0; font-size:15.5px; font-weight:600; line-height:1.25; }
+  .mk-sub { font-size:12.5px; color:var(--faint); margin-top:2px; }
+  .mk-val { flex-shrink:0; font-size:15.5px; font-weight:700; text-align:right; min-width:74px; }
   .mk-val small { display:block; font-size:10.5px; color:var(--faint); font-weight:600; }
-  .mk-delta { flex-shrink:0; font-size:12px; font-weight:700; min-width:62px; text-align:right; }
+  .mk-delta { flex-shrink:0; font-size:12.5px; font-weight:700; min-width:62px; text-align:right; }
   .up { color:var(--clay); } .down { color:var(--frost); } .flat { color:var(--faint); }
   .inrange { color:var(--moss); } .outrange { color:var(--amber); }
-  .panel-row { display:flex; align-items:center; gap:10px; padding:11px 6px; border-bottom:1px solid var(--line); }
+  .panel-row { display:flex; align-items:center; gap:10px; padding:13px 6px; border-bottom:1px solid var(--line); }
   .panel-date { flex:1; font-size:13.5px; font-weight:600; }
   .panel-meta { font-size:11.5px; color:var(--faint); margin-top:2px; }
   .compare-row { display:flex; align-items:center; gap:8px; margin:0 6px 14px; flex-wrap:wrap; }
@@ -356,14 +380,11 @@
   .streak-pill.zero { color:var(--faint); background:rgba(236,231,214,.07); font-weight:600; }
 
 
-  .eatbar { margin-top:12px; display:none; }
-  .eatbar.show { display:block; cursor:pointer; }
-  .eat-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; gap:10px; }
-  .eat-label { font-size:11px; font-weight:800; letter-spacing:.11em; text-transform:uppercase; }
+  .eat-label { font-weight:700; display:block; }
   .eat-left { font-size:12.5px; font-weight:700; white-space:nowrap; }
-  .eat-sub { font-size:11px; color:var(--faint); font-weight:600; }
+  .eat-sub { color:var(--faint); font-weight:600; display:block; margin-top:2px; }
   .eat-track { height:6px; background:rgba(236,231,214,.10); border-radius:4px; overflow:hidden; }
-  .eat-fill { height:100%; border-radius:4px; transition:width .5s ease; }
+  .eat-fill { height:100%; width:0%; border-radius:4px; transition:width .5s ease; }
   .eat-eating .eat-label, .eat-eating .eat-left { color:var(--moss); }
   .eat-eating .eat-fill { background:var(--moss); }
   .eat-fasting .eat-label, .eat-fasting .eat-left { color:var(--rose); }
@@ -399,7 +420,7 @@
     -webkit-appearance:none; appearance:none; min-width:0; max-width:100%; }
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
-  .seclabel { display:block; font-size:12px; letter-spacing:.05em; text-transform:uppercase;
+  .seclabel { display:block;
     color:var(--muted); margin-bottom:6px; font-weight:600; }
   .seg { display:flex; gap:8px; margin-bottom:14px; }
   .seg button { flex:1; padding:11px; border-radius:10px; border:1px solid var(--line); background:var(--bg);
@@ -422,8 +443,7 @@
   .md-note { font-size:12px; color:var(--faint); margin:10px 0 0; line-height:1.5; }
   .md-chart { margin:16px 0 6px; }
   .md-chart svg { width:100%; height:auto; display:block; }
-  .md-sec { font-family:Georgia,serif; font-size:13px; color:var(--muted);
-    padding:16px 0 6px; letter-spacing:.04em; text-transform:uppercase; }
+  .md-sec { color:var(--faint); padding:16px 0 6px; }
   .md-row { display:flex; align-items:baseline; gap:10px; padding:9px 0;
     border-bottom:1px solid var(--line); font-size:13px; }
   .md-date { flex:1; color:var(--ink); }
@@ -464,7 +484,7 @@
   .drag-lift { position:relative; z-index:5; background:var(--surface); border-radius:9px;
     box-shadow:0 8px 22px rgba(0,0,0,.45); }
   .drag-shift { transition:transform .16s ease; }
-  .sub-count { font-size:12px; color:var(--muted); margin-left:8px; font-weight:600; }
+  .sub-count { font-size:12.5px; color:var(--muted); margin-left:8px; font-weight:600; }
   /* Inline description preview + expanded panel */
   .desc-peek { display:flex; align-items:center; gap:6px; margin-top:4px; cursor:pointer;
     font-size:12px; color:var(--muted); }
@@ -480,6 +500,16 @@
   .task-sec .row { background:var(--bg); }
 
   .sheet-actions { display:flex; gap:10px; margin-top:20px; }
+
+  /* True hairlines where the display can draw them. */
+  @media (min-resolution:2dppx){
+    .row, .mk, .panel-row, .md-row, header { border-bottom-width:0.5px; }
+    .block-head { border-bottom-width:0.5px; }
+  }
+  /* Every transition this pass touched, honoured. */
+  @media (prefers-reduced-motion: reduce){
+    .progress-bar, .eat-fill, .drag-shift, .tabs-wrap::after { transition:none; }
+  }
   .link-btn { width:100%; margin-top:6px; padding:12px; border-radius:10px; background:var(--frost-soft);
     color:var(--frost); border:none; font-size:14px; font-weight:600; }
 </style>
@@ -500,10 +530,13 @@
     <button onclick="shiftDay(1)">›</button>
   </div>
   <div class="progress-wrap" id="progWrap">
-    <div class="progress-head"><span class="pct" id="pct">0%</span><span class="pct-sub">done</span></div>
+    <div class="status-head">
+      <div class="status-left"><span class="pct" id="pct">0%</span><span class="pct-sub">done</span></div>
+      <div class="status-right" id="eatHead" onclick="openEatSheet()"></div>
+    </div>
     <div class="progress-track"><div class="progress-bar" id="bar"></div></div>
+    <div class="eat-track" id="eatTrack"><div class="eat-fill" id="eatFill"></div></div>
   </div>
-  <div class="eatbar" id="eatbar" onclick="openEatSheet()"></div>
   <div class="tabs-wrap" id="tabsWrap">
     <div class="tabs" id="tabs">
       <button class="tab active" id="tab-agenda" onclick="setTab('agenda')">Agenda</button>
@@ -1221,22 +1254,22 @@ const hm=x=>{
   return h>0 ? h+' h '+m+' min' : m+' min';
 };
 function renderEatWindow(){
-  const box=document.getElementById('eatbar');
-  if(!box) return;
+  const head=document.getElementById('eatHead'), track=document.getElementById('eatTrack');
+  const wrap=document.getElementById('progWrap');
+  if(!head||!track||!wrap) return;
   const now=new Date();
-  const onToday=sameDay(viewDate,now);
-  const show=onToday && activeTab!=='cal' && activeTab!=='bio';
-  box.className='eatbar'+(show?' show ':' ')+(show?'':'');
-  if(!show){ box.innerHTML=''; return; }
+  const show=sameDay(viewDate,now) && activeTab!=='cal' && activeTab!=='bio';
+  wrap.classList.remove('eat-eating','eat-fasting');
+  head.style.display=show?'block':'none';
+  track.style.display=show?'block':'none';
+  if(!show){ head.innerHTML=''; return; }
   const st=eatingState(now);
-  box.className='eatbar show '+(st.mode==='eating'?'eat-eating':'eat-fasting');
-  box.innerHTML=`
-    <div class="eat-head">
-      <span class="eat-label">${st.mode==='eating'?'Eating window':'Fasting'}</span>
-      <span class="eat-left">${hm(st.left)} ${st.mode==='eating'?'left':'until '+hoursToHHMM(EAT_START)}</span>
-    </div>
-    <div class="eat-track"><div class="eat-fill" style="width:${Math.max(0,Math.min(100,st.pct))}%"></div></div>
-    <div class="eat-sub">${hoursToHHMM(EAT_START)} – ${hoursToHHMM(EAT_END)} · tap to edit</div>`;
+  wrap.classList.add(st.mode==='eating'?'eat-eating':'eat-fasting');
+  head.innerHTML=`
+    <span class="eat-label">${st.mode==='eating'?'Eating window':'Fasting'}</span>
+    <span class="eat-left">${hm(st.left)} ${st.mode==='eating'?'left':'until '+hoursToHHMM(EAT_START)}</span>
+    <span class="eat-sub">${hoursToHHMM(EAT_START)} – ${hoursToHHMM(EAT_END)} · tap to edit</span>`;
+  document.getElementById('eatFill').style.width=Math.max(0,Math.min(100,st.pct))+'%';
 }
 
 function streakFor(id,from){
@@ -1541,7 +1574,7 @@ function renderFilters(){
 
 // header is position:fixed (out of flow) so it stays put while everything
 // below it scrolls; this keeps body's top padding matched to its actual
-// height, which changes per tab (daynav/progress/eatbar show or hide).
+// height, which changes per tab (daynav and the status block show or hide).
 function syncHeaderHeight(){
   const h=document.querySelector('header'); if(!h) return;
   document.body.style.paddingTop=h.offsetHeight+'px';
@@ -1580,7 +1613,7 @@ function renderRoutine(c){
       <div class="rbody">
         <div class="rtitle">${esc(r.title)}</div>
         <div class="rmeta"><span class="tag ${r.cat}">${LABEL[r.cat]}</span>
-          <span>${r.time} · ${r.dur} min</span>${r.date?'<span class="tag once">Single</span>':(r.cat==='event'?'<span class="tag once">Repeats</span>':'')}${pill}${streakPill(r)}</div>
+          <span class="row-time">${r.time} · ${r.dur} min</span>${r.date?'<span class="tag once">Single</span>':(r.cat==='event'?'<span class="tag once">Repeats</span>':'')}${pill}${streakPill(r)}</div>
         ${descPeekHTML(r,'r:'+r.id)}
       </div>
       <div class="acts">
