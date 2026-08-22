@@ -611,12 +611,12 @@
   .arc-tag.flip { left:auto; right:14px; transform-origin:100% 50%; }
   .arc-pin:hover .arc-tag { opacity:1; }
 
+  /* Always the day summary now, and always click-through: detail moved out
+     to its own card, so nothing in the middle of the disc can swallow a tap
+     meant for a node behind it. */
   .arc-hud { position:absolute; left:50%; top:42%; transform:translate(-50%,-50%);
     text-align:center; pointer-events:none; animation:arc-fade .8s ease 1.9s both;
-    width:min(66%, 215px); }
-  /* The detail readout needs to be clickable; the summary must not be, or it
-     would swallow taps meant for pins behind it. */
-  .arc-hud.detail { pointer-events:auto; }
+    width:min(70%, 260px); }
   @keyframes arc-fade { from { opacity:0; transform:translate(-50%,-42%) } }
   .arc-cap { font-family:var(--mono); font-size:10.5px; letter-spacing:.2em;
     text-transform:uppercase; color:var(--muted); }
@@ -634,30 +634,43 @@
   .arc-next .nt { font-variant-numeric:tabular-nums; font-weight:700; flex-shrink:0; }
   .arc-next .nn { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-  /* ---- centre detail readout (tap a node) ---- */
-  .arc-d-time { font-family:var(--mono); font-size:12px; font-weight:700; color:var(--frost);
-    letter-spacing:.1em; text-shadow:var(--glow-soft); }
-  .arc-d-name { font-size:14.5px; font-weight:600; color:var(--ink); line-height:1.25;
-    margin-top:4px; max-height:2.5em; overflow:hidden; }
-  .arc-d-meta { display:flex; gap:6px; justify-content:center; align-items:center;
-    margin-top:7px; flex-wrap:wrap; }
-  .arc-d-tag { font-family:var(--mono); font-size:9px; letter-spacing:.12em;
-    text-transform:uppercase; border:1px solid currentColor; padding:2px 6px; font-weight:700; }
-  .arc-d-status { font-family:var(--mono); font-size:9px; letter-spacing:.12em;
-    text-transform:uppercase; color:var(--faint); }
+  /* ---- node detail card (below the arc on phones, beside it on desktop) ----
+     Sized for reading, not for squeezing into the middle of a tilted ring:
+     real body type, 44px-plus hit targets, full-width actions. */
+  .arc-detail { width:100%; max-width:min(96vw, 560px); }
+  .arc-d-card { background:var(--surface); border:1px solid rgba(95,216,245,.34);
+    padding:15px 16px 16px; position:relative;
+    clip-path:polygon(var(--notch) 0, 100% 0, 100% calc(100% - var(--notch)),
+                      calc(100% - var(--notch)) 100%, 0 100%, 0 var(--notch)); }
+  /* padding-right reserves the close button's corner — without it the
+     right-aligned status runs underneath it and gets clipped. */
+  .arc-d-top { display:flex; align-items:baseline; gap:10px; padding-right:34px; }
+  .arc-d-time { font-family:var(--mono); font-size:15px; font-weight:700; color:var(--frost);
+    letter-spacing:.06em; font-variant-numeric:tabular-nums; text-shadow:var(--glow-soft);
+    flex-shrink:0; }
+  .arc-d-status { font-family:var(--mono); font-size:9.5px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--faint); margin-left:auto; flex-shrink:0; }
   .arc-d-status.on { color:var(--moss); }
-  .arc-d-acts { display:flex; gap:6px; margin-top:11px; }
+  .arc-d-name { font-size:17px; font-weight:600; color:var(--ink); line-height:1.3; margin-top:6px; }
+  .arc-d-meta { display:flex; gap:7px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  .arc-d-tag { font-family:var(--mono); font-size:9.5px; letter-spacing:.12em;
+    text-transform:uppercase; border:1px solid currentColor; padding:3px 7px; font-weight:700; }
+  .arc-d-acts { display:flex; gap:8px; margin-top:14px; }
   .arc-d-acts button {
-    flex:1; font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase;
-    font-weight:700; padding:9px 4px; border:1px solid var(--line); background:var(--surface);
-    color:var(--ink); border-radius:0;
-    clip-path:polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+    flex:1; font-family:var(--mono); font-size:11.5px; letter-spacing:.1em; text-transform:uppercase;
+    font-weight:700; min-height:44px; padding:0 8px; border:1px solid var(--line);
+    background:var(--bg); color:var(--ink); border-radius:0;
+    clip-path:polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); }
   .arc-d-acts .pri { background:var(--frost-soft); border-color:rgba(95,216,245,.45); color:var(--frost); }
   .arc-d-acts .pri.undo { background:rgba(79,230,176,.14); border-color:rgba(79,230,176,.45); color:var(--moss); }
-  .arc-d-close { position:absolute; top:-26px; left:50%; transform:translateX(-50%);
-    width:24px; height:24px; border-radius:50%; border:1px solid var(--line);
-    background:var(--surface); color:var(--muted); font-size:11px; line-height:1;
-    display:grid; place-items:center; }
+  .arc-d-close { position:absolute; top:8px; right:8px; width:30px; height:30px;
+    border-radius:50%; border:1px solid var(--line); background:var(--bg); color:var(--muted);
+    font-size:12px; line-height:1; display:grid; place-items:center; }
+  /* Shown in the card's place when nothing is selected, so the layout does
+     not jump when a node is tapped and the affordance is discoverable. */
+  .arc-d-hint { text-align:center; font-family:var(--mono); font-size:10.5px;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--faint);
+    border:1px dashed var(--line); padding:14px 12px; }
 
   /* Selected node reads as locked-on: a ring around it, always lit. */
   .arc-pin.sel .arc-head-dot {
@@ -705,13 +718,24 @@
     background-size:44px 44px, 44px 44px, 100% 3px, 100% 100%;
   }
   .arc-overlay > * { position:relative; z-index:1; }
-  #arcOvStageHost { width:100%; }
-  /* Width alone was the limit here — a phone is much taller than it is
-     wide, and the screenshots showed a lot of unused vertical room above
-     and below a width-capped stage. min(100%, 62vh) lets it grow against
-     whichever is actually smaller, so it fills the screen properly instead
-     of just the screen's width. */
-  .arc-overlay .arc-stage { width:min(100%, 62vh); max-width:540px; aspect-ratio:1; margin:0 auto; }
+  .arc-ov-body { display:flex; flex-direction:column; align-items:center; gap:14px; width:100%; }
+  #arcOvStageHost { width:100%; display:flex; justify-content:center; }
+  /* The stage must stay SQUARE: the SVG's viewBox is 400x400 with the
+     default xMidYMid-meet, so a non-square box would scale the disc down to
+     the shorter side instead of filling the wider one. Growth therefore
+     comes from width, and the vertical slack the tilt leaves is reclaimed
+     by easing the tilt (below) rather than by squashing the box. */
+  .arc-overlay .arc-stage { width:100%; max-width:min(96vw, 560px); aspect-ratio:1; margin:0 auto; }
+  /* The 42% default was tuned for the rail's steep 44deg, where the disc's
+     visual centre sits high. At the overlay's gentler tilt the readout has
+     to drop back toward the true centre or it collides with the ring's top
+     edge — which it did, with the taller next-up row added. */
+  .arc-overlay .arc-hud { top:49%; }
+  /* Eased well back from the rail's 44deg. Foreshortening is what made the
+     far side of the ring hard to read, and a rounder disc also wastes less
+     of the screen's height — both of which is what "bigger and readable"
+     actually needs here. Scoped, so the rail keeps its steeper angle. */
+  .arc-overlay { --tilt:34deg; }
   .arc-close { position:fixed; top:calc(16px + env(safe-area-inset-top)); right:16px;
     width:36px; height:36px; border-radius:50%; background:var(--surface); border:1px solid var(--line);
     color:var(--ink); font-size:15px; z-index:36; }
@@ -881,18 +905,35 @@
        rail's own width. perspective is tightened for the smaller box —
        1150px (the reference's value, tuned for a ~460px stage) reads as an
        exaggerated tilt at 240px, so a bigger number flattens it back down. */
-    #arcRailWrap { display:block; margin-bottom:2px; }
+    #arcRailWrap { display:block; margin-bottom:2px; cursor:pointer; }
     #arcRailWrap .arc-stage { width:100%; max-width:240px; aspect-ratio:1; margin:0 auto; perspective:2000px; }
     #arcRailWrap .arc-hud { top:44%; width:min(74%, 168px); }
     #arcRailWrap .arc-pct { font-size:26px; margin:4px 0 4px; }
     /* The rail stage is 240px, so the readout tightens to match. */
     #arcRailWrap .arc-next { margin-top:6px; padding-top:5px; font-size:10px; }
-    #arcRailWrap .arc-d-name { font-size:13px; }
-    #arcRailWrap .arc-d-acts { flex-direction:column; gap:4px; margin-top:8px; }
-    #arcRailWrap .arc-d-acts button { padding:7px 4px; }
+    /* At 240px the rail arc is a summary, not a workspace — its nodes are
+       too small to inspect. Clicking anywhere on it opens the full-screen
+       overlay, which is where detail lives on desktop too. */
+    #arcRailWrap .arc-expand {
+      display:block; width:100%; margin-top:6px; background:none; border:0;
+      font-family:var(--mono); font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+      color:var(--faint); padding:4px 0; }
+    #arcRailWrap:hover .arc-expand { color:var(--frost); }
     /* No longer a tappable trigger — the arc is already on screen. */
     .rail-right .progress-wrap { cursor:default; }
     .rail-right .progress-wrap:active { background:none; }
+
+    /* Full-screen overlay, desktop shape: the disc sizes against HEIGHT
+       here (a desktop window is wider than it is tall — the opposite of the
+       phone), and the detail card moves alongside instead of underneath,
+       so neither has to shrink to share the screen. */
+    .arc-ov-body { flex-direction:row; align-items:center; justify-content:center;
+      gap:36px; max-width:1180px; margin:0 auto; }
+    #arcOvStageHost { width:auto; flex:0 1 auto; }
+    .arc-overlay .arc-stage { width:min(52vw, 74vh); max-width:none; }
+    .arc-overlay { --tilt:30deg; }
+    .arc-detail { width:320px; max-width:320px; flex-shrink:0; }
+    .arc-tasklist { max-width:1180px; }
 
     /* The floating + becomes a labelled button docked to the left rail —
        still position:fixed (robust regardless of the rail's content height,
@@ -993,18 +1034,25 @@
 <button class="fab" onclick="openSheet('add')" aria-label="Add">+<span class="fab-label" hidden>Add</span></button>
 <div class="undo-toast" id="undoToast"></div>
 
-<!-- Mobile-only: the day arc as a full-screen overlay, opened by tapping
-     the status block. Fixed view (no drag), so nothing here needs to
-     capture the pointer — this element scrolls normally if content
-     overflows, and taps on pins reach them uninterrupted. -->
+<!-- The day arc, full screen. Opened by tapping the status block on the
+     phone or the rail arc on desktop; the two differ only in how the body
+     below lays out (stacked vs. side-by-side), which is CSS, not markup.
+     Fixed view (no drag), so nothing here captures the pointer — this
+     element scrolls normally and taps reach the pins uninterrupted. -->
 <div class="arc-overlay" id="arcOverlay" onclick="arcOverlayTap(event)">
-  <button class="arc-close" onclick="arcCloseMobile()" aria-label="Close day arc">✕</button>
-  <!-- Fills the free space the fixed (centred) stage leaves above it.
-       Populated by arcRenderTaskList(); hidden via the DOM property (not
+  <button class="arc-close" onclick="arcCloseOverlay()" aria-label="Close day arc">✕</button>
+  <!-- Populated by arcRenderTaskList(); hidden via the DOM property (not
        an attribute) when there's nothing scheduled, so it never leaves an
        empty header behind. -->
   <div class="arc-tasklist" id="arcTaskList" hidden></div>
-  <div id="arcOvStageHost"></div>
+  <div class="arc-ov-body">
+    <div id="arcOvStageHost"></div>
+    <!-- Node detail. Deliberately out here rather than inside the ring:
+         the centre of a tilted disc is the least readable place on screen,
+         and it had to stay tiny to fit. Out here it gets real type sizes
+         and full-width buttons. -->
+    <div class="arc-detail" id="arcDetail"></div>
+  </div>
 </div>
 
 <div class="overlay" id="overlay">
@@ -2138,7 +2186,7 @@ function arcNode(base,suffix){ return document.getElementById(base+'-'+suffix); 
 // in :root). Dragging previously captured the pointer on .arc-stage, which
 // also silently ate the click a pin needed to open its edit sheet; removing
 // it fixes both the orientation drifting off 0-at-top and pin taps at once.
-let arcMobileOpen=false;
+let arcOverlayOpen=false;
 const arcState={
   rail:{ built:false, pinSig:null, staticSig:null },
   ov:  { built:false, pinSig:null, staticSig:null }
@@ -2181,15 +2229,15 @@ function arcItems(){
 // what makes sheetTypeFor()/openSheet() resolve the right sheet type for an
 // id it wasn't opened from, then puts the tab back exactly as it was.
 function arcOpenRoutine(id){
-  arcCloseMobile();
+  arcCloseOverlay();
   const prev=activeTab; activeTab='routine'; openSheet('edit',id); activeTab=prev;
 }
 function arcOpenTask(id){
-  arcCloseMobile();
+  arcCloseOverlay();
   const prev=activeTab; activeTab='tasks'; openSheet('edit',id); activeTab=prev;
 }
 function arcOpenSupp(){
-  arcCloseMobile();
+  arcCloseOverlay();
   setTab('supps');
 }
 
@@ -2376,51 +2424,70 @@ function arcHudHTML(){
     <div class="arc-clock">${done}/${total} done</div>`;
 }
 
-/* ---- centre detail readout ----
+/* ---- node selection & detail card ----
    arcSelected holds a pin key. Everything reads through arcItems() rather
    than caching the item, so a toggle elsewhere (or a re-render) keeps the
-   panel truthful instead of showing a stale done-state. */
+   card truthful instead of showing a stale done-state.
+   The centre of the ring now always shows the day summary; detail lives in
+   the card outside the disc, where it can use readable type. */
 let arcSelected=null;
 
-function arcSelect(k){ arcSelected=(arcSelected===k)?null:k; arcRenderCentreAll(); }
-function arcClearSelection(){ if(arcSelected===null) return; arcSelected=null; arcRenderCentreAll(); }
+// A tap on a rail node expands to the overlay first: at 240px the rail arc
+// is a summary, and its detail card has nowhere to live.
+function arcSelect(k){
+  arcSelected=(arcSelected===k)?null:k;
+  if(arcSelected!==null && !arcOverlayOpen){ arcOpenOverlay(); return; }
+  arcRenderDetail(); arcMarkSelected();
+}
+function arcClearSelection(){
+  if(arcSelected===null) return;
+  arcSelected=null; arcRenderDetail(); arcMarkSelected();
+}
 function arcSelectedItem(){
   return arcSelected ? arcItems().find(it=>it.key===arcSelected)||null : null;
 }
-// Fires the action, then re-renders: toggle() calls render(), which reaches
-// arcRefresh() and repaints both the ring and this panel.
+// toggle() calls render(), which reaches arcRefresh() and repaints the ring
+// and this card together.
 function arcDetailToggle(){ const it=arcSelectedItem(); if(it) it.toggle(); }
 function arcDetailEdit(){ const it=arcSelectedItem(); if(it) it.edit(); }
 
-function arcDetailHTML(it){
-  return `<button class="arc-d-close" onclick="arcClearSelection()" aria-label="Back to day summary">✕</button>
-    <div class="arc-d-time">${esc(it.time)}</div>
+function arcRenderDetail(){
+  const box=document.getElementById('arcDetail'); if(!box) return;
+  const it=arcSelectedItem();
+  if(!it){
+    box.innerHTML='<div class="arc-d-hint">Tap a node for details</div>';
+    return;
+  }
+  box.innerHTML=`<div class="arc-d-card">
+    <button class="arc-d-close" onclick="arcClearSelection()" aria-label="Close details">✕</button>
+    <div class="arc-d-top">
+      <span class="arc-d-time">${esc(it.time)}</span>
+      <span class="arc-d-status${it.done?' on':''}">${it.done?'Done':'Pending'}</span>
+    </div>
     <div class="arc-d-name">${esc(it.name)}</div>
     <div class="arc-d-meta">
       <span class="arc-d-tag" style="color:var(--${it.colorVar})">${esc(it.catLabel)}</span>
-      <span class="arc-d-status${it.done?' on':''}">${it.done?'Done':'Pending'}</span>
     </div>
     <div class="arc-d-acts">
       <button class="pri${it.done?' undo':''}" onclick="arcDetailToggle()">${it.done?'↺ Undo':'✓ Done'}</button>
       <button onclick="arcDetailEdit()">Edit</button>
-    </div>`;
+    </div>
+  </div>`;
+}
+
+// Lock-on ring, applied across whichever instances are currently built.
+function arcMarkSelected(){
+  ['rail','ov'].forEach(s=>{
+    if(!arcState[s].built) return;
+    const pinsBox=arcNode('arcPins',s); if(!pinsBox) return;
+    [...pinsBox.children].forEach(p=>
+      p.classList.toggle('sel', arcSelected!==null && p.dataset.key===arcSelected));
+  });
 }
 
 function arcRenderCentre(suffix){
   const hud=arcNode('arcHud',suffix); if(!hud) return;
-  const it=arcSelectedItem();
-  hud.classList.toggle('detail',!!it);
-  hud.innerHTML=it?arcDetailHTML(it):arcHudHTML();
-  // Mark the matching pin as locked-on.
-  const pinsBox=arcNode('arcPins',suffix);
-  if(pinsBox) [...pinsBox.children].forEach(p=>
-    p.classList.toggle('sel',!!it && p.dataset.key===it.key));
-}
-// Both instances stay in sync — the desktop rail and the mobile overlay can
-// legitimately be built at the same time when the window is resized across
-// the breakpoint mid-session.
-function arcRenderCentreAll(){
-  ['rail','ov'].forEach(s=>{ if(arcState[s].built) arcRenderCentre(s); });
+  hud.innerHTML=arcHudHTML();
 }
 
 // Mobile overlay only — the desktop rail already has its own "Due today"
@@ -2491,7 +2558,8 @@ function arcRefresh(suffix){
   }
   arcUpdateNowLine(suffix);
   arcRenderCentre(suffix);
-  if(suffix==='ov') arcRenderTaskList();
+  if(suffix==='ov'){ arcRenderTaskList(); arcRenderDetail(); }
+  arcMarkSelected();
 }
 
 function arcBuildFull(suffix){
@@ -2506,44 +2574,45 @@ function arcBuildFull(suffix){
   arcBuildPins(suffix,items);
   arcUpdateNowLine(suffix);
   arcRenderCentre(suffix);
-  if(suffix==='ov') arcRenderTaskList();
+  if(suffix==='ov'){ arcRenderTaskList(); arcRenderDetail(); }
+  arcMarkSelected();
   arcState[suffix].built=true;
 }
 
 // Desktop: build once, then just refresh in place on every render(). Mobile:
-// only does anything while the overlay is open (arcOpenMobile() does the
+// only does anything while the overlay is open (arcOpenOverlay() does the
 // initial full build itself).
 function renderArc(){
   document.getElementById('progWrap').tabIndex=isDesktopLayout()?-1:0;
   if(isDesktopLayout()){
     if(!arcState.rail.built) arcBuildFull('rail'); else arcRefresh('rail');
-  } else if(arcMobileOpen){
+  } else if(arcOverlayOpen){
     arcRefresh('ov');
   }
 }
 // Lightweight per-minute tick (now-hand + HUD clock only) for whichever
 // instance is actually on screen, mirroring updateNowLine()'s own interval.
 function arcTick(){
-  const suffix=isDesktopLayout()?'rail':(arcMobileOpen?'ov':null);
+  const suffix=isDesktopLayout()?'rail':(arcOverlayOpen?'ov':null);
   if(!suffix||!arcState[suffix].built) return;
   arcUpdateNowLine(suffix);
   arcRenderCentre(suffix);
 }
 function arcOnResize(){
   if(isDesktopLayout()){ if(arcState.rail.built) arcBuildPins('rail',arcItems()); }
-  else if(arcMobileOpen){ arcBuildPins('ov',arcItems()); }
+  else if(arcOverlayOpen){ arcBuildPins('ov',arcItems()); }
 }
 
 function arcBlockTap(){
   if(isDesktopLayout()) return;   // inert there — the arc is already inline in the rail
-  arcOpenMobile();
+  arcOpenOverlay();
 }
 function arcBlockKey(e){
   if(e.key!=='Enter'&&e.key!==' ') return;
   e.preventDefault(); arcBlockTap();
 }
-function arcOpenMobile(){
-  arcMobileOpen=true;
+function arcOpenOverlay(){
+  arcOverlayOpen=true;
   document.getElementById('arcOverlay').classList.add('open');
   // The overlay is full-screen, unlike the bottom sheet the rest of the app
   // uses — nothing else locks body scroll, so without this a swipe on the
@@ -2551,26 +2620,37 @@ function arcOpenMobile(){
   document.body.style.overflow='hidden';
   arcBuildFull('ov');
 }
-function arcCloseMobile(){
-  if(!arcMobileOpen) return;
-  arcMobileOpen=false;
+function arcCloseOverlay(){
+  if(!arcOverlayOpen) return;
+  arcOverlayOpen=false;
   arcSelected=null;   // reopen on the day summary, not on whatever was last tapped
   document.getElementById('arcOverlay').classList.remove('open');
   document.body.style.overflow='';
+  arcMarkSelected();  // clear the lock-on ring left on the rail copy
 }
 function arcOverlayTap(e){
-  if(e.target.id==='arcOverlay') arcCloseMobile();   // tap outside the stage/close button
+  if(e.target.id==='arcOverlay') arcCloseOverlay();   // tap outside the stage/close button
 }
 // Escape unwinds one level at a time: an open node readout first, the whole
 // overlay only once nothing is selected.
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
   if(arcSelected!==null){ arcClearSelection(); return; }
-  if(arcMobileOpen) arcCloseMobile();
+  if(arcOverlayOpen) arcCloseOverlay();
 });
 
-document.getElementById('arcRailWrap').innerHTML=arcStageHTML('rail');
+document.getElementById('arcRailWrap').innerHTML=
+  arcStageHTML('rail')+
+  '<button class="arc-expand" onclick="arcOpenOverlay()">Expand ⤢</button>';
 document.getElementById('arcOvStageHost').innerHTML=arcStageHTML('ov');
+// Clicking the rail disc itself expands too — the button is the visible
+// affordance, the whole stage is the target. Nodes stop the event so
+// tapping one still selects (arcSelect then expands with it selected).
+document.getElementById('arcRailWrap').addEventListener('click',e=>{
+  if(arcOverlayOpen) return;
+  if(e.target.closest('.arc-head-dot,.arc-expand')) return;
+  arcOpenOverlay();
+});
 
 function renderRoutine(c){
   let items=visibleRoutines();
