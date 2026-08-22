@@ -529,7 +529,7 @@
      (#arcRailWrap, always on screen) — each has its own DOM ids suffixed
      -ov / -rail, built and driven by arcBuildFull()/arcRefresh() in the
      script. Every colour is one of the app's existing CSS variables. */
-  .arc-stage { position:relative; perspective:1150px; perspective-origin:50% 42%; touch-action:none; }
+  .arc-stage { position:relative; perspective:1150px; perspective-origin:50% 42%; }
   .arc-disc { position:absolute; inset:0; transform-style:preserve-3d;
     transform: rotateX(var(--tilt)) rotateZ(var(--spin,0deg));
     animation: arc-settle 1.6s cubic-bezier(.2,.85,.25,1) both; }
@@ -780,8 +780,9 @@
 <div class="undo-toast" id="undoToast"></div>
 
 <!-- Mobile-only: the day arc as a full-screen overlay, opened by tapping
-     the status block. touch-action:none lives on .arc-stage only (set in
-     CSS), so this outer element can still scroll if content overflows. -->
+     the status block. Fixed view (no drag), so nothing here needs to
+     capture the pointer — this element scrolls normally if content
+     overflows, and taps on pins reach them uninterrupted. -->
 <div class="arc-overlay" id="arcOverlay" onclick="arcOverlayTap(event)">
   <button class="arc-close" onclick="arcCloseMobile()" aria-label="Close day arc">✕</button>
   <div id="arcOvStageHost"></div>
@@ -1913,10 +1914,15 @@ function arcStageHTML(suffix){
 }
 function arcNode(base,suffix){ return document.getElementById(base+'-'+suffix); }
 
+// Fixed view, not draggable — spin stays 0 (midnight at the top, per
+// arcAngle's -90deg offset) and tilt stays the CSS default (--tilt:60deg
+// in :root). Dragging previously captured the pointer on .arc-stage, which
+// also silently ate the click a pin needed to open its edit sheet; removing
+// it fixes both the orientation drifting off 0-at-top and pin taps at once.
 let arcMobileOpen=false;
 const arcState={
-  rail:{ built:false, dragBound:false, pinSig:null, staticSig:null, spin:0, tilt:60, dragging:false, sx:0, sy:0 },
-  ov:  { built:false, dragBound:false, pinSig:null, staticSig:null, spin:0, tilt:60, dragging:false, sx:0, sy:0 }
+  rail:{ built:false, pinSig:null, staticSig:null },
+  ov:  { built:false, pinSig:null, staticSig:null }
 };
 
 // Optional routines switched off for viewDate are already excluded by
@@ -2102,27 +2108,6 @@ function arcRefresh(suffix){
   const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML(items);
 }
 
-function arcAttachDrag(suffix){
-  const st=arcState[suffix];
-  if(st.dragBound) return;
-  const stage=arcNode('arcStage',suffix), disc=arcNode('arcDisc',suffix);
-  if(!stage||!disc) return;
-  st.dragBound=true;
-  const apply=()=>{ disc.style.setProperty('--spin',st.spin+'deg'); disc.style.setProperty('--tilt',st.tilt+'deg'); };
-  stage.addEventListener('pointerdown',e=>{
-    st.dragging=true; st.sx=e.clientX; st.sy=e.clientY;
-    disc.style.animation='none'; stage.setPointerCapture(e.pointerId);
-  });
-  stage.addEventListener('pointermove',e=>{
-    if(!st.dragging) return;
-    st.spin+=(e.clientX-st.sx)*0.35;
-    st.tilt=Math.min(82,Math.max(22,st.tilt+(e.clientY-st.sy)*0.22));
-    st.sx=e.clientX; st.sy=e.clientY; apply();
-  });
-  stage.addEventListener('pointerup',()=>{ st.dragging=false; });
-  stage.addEventListener('pointercancel',()=>{ st.dragging=false; });
-}
-
 function arcBuildFull(suffix){
   const disc=arcNode('arcDisc',suffix);
   if(disc && arcState[suffix].built){
@@ -2136,7 +2121,6 @@ function arcBuildFull(suffix){
   arcUpdateNowLine(suffix);
   const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML(items);
   arcState[suffix].built=true;
-  arcAttachDrag(suffix);
 }
 
 // Desktop: build once, then just refresh in place on every render(). Mobile:
