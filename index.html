@@ -587,7 +587,14 @@
 
   /* ---- mobile: opens on demand, full-screen ---- */
   .arc-overlay { display:none; position:fixed; inset:0; background:var(--bg); z-index:35;
-    overflow-y:auto; padding:calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom)); }
+    /* overflow-x:hidden matters: the disc's rings/pins are 3D-transformed
+       and nothing clips them, so a few pixels legitimately poke past
+       .arc-stage's own box near the edges. Without this, that sliver of
+       horizontal overflow made the whole page pannable sideways with a
+       swipe — visually confusing since nothing was actually "there" to
+       scroll to, just a stray few px of transformed content. */
+    overflow-y:auto; overflow-x:hidden;
+    padding:calc(24px + env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom)); }
   /* align-items default (stretch), not center: a centered flex item has no
      definite cross-axis size, so .arc-stage's width:100% below had nothing
      real to resolve against and rendered oversized (WebKit in particular
@@ -596,7 +603,7 @@
      visually centered via its own max-width + margin:auto. */
   .arc-overlay.open { display:flex; flex-direction:column; justify-content:center; }
   #arcOvStageHost { width:100%; }
-  .arc-overlay .arc-stage { width:100%; max-width:420px; aspect-ratio:1; margin:0 auto; }
+  .arc-overlay .arc-stage { width:100%; max-width:460px; aspect-ratio:1; margin:0 auto; }
   .arc-close { position:fixed; top:calc(16px + env(safe-area-inset-top)); right:16px;
     width:36px; height:36px; border-radius:50%; background:var(--surface); border:1px solid var(--line);
     color:var(--ink); font-size:15px; z-index:36; }
