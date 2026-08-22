@@ -514,6 +514,100 @@
   }
   .link-btn { width:100%; margin-top:6px; padding:12px; border-radius:10px; background:var(--frost-soft);
     color:var(--frost); border:none; font-size:14px; font-weight:600; }
+
+  /* ============ Desktop (>=900px): three-column shell ============
+     Everything below is scoped to this query. Nothing above changes, so
+     narrowing back under 900px returns exactly to the phone layout. */
+  @media (min-width:900px){
+    /* Container: same centred idea as the phone's max-width:640px body,
+       just wider — clearance on each side for the two fixed rails. */
+    body { max-width:1200px; padding-left:220px; padding-right:300px; }
+    main, .filters { max-width:680px; margin-left:auto; margin-right:auto; }
+    main { padding-bottom:40px; }
+
+    /* Left rail: the fixed top header becomes a fixed full-height sidebar.
+       transform:none matters beyond undoing the mobile centring trick — a
+       transformed ancestor would otherwise become the containing block for
+       .rail-right's position:fixed below, dragging it back inside this
+       200px column instead of the viewport's right edge. */
+    header {
+      left:0; transform:none; width:200px; max-width:none; height:100vh;
+      padding:32px 16px 116px; border-bottom:none; border-right:1px solid var(--line);
+      display:flex; flex-direction:column; overflow-y:auto;
+    }
+    .daynav { flex-wrap:wrap; row-gap:8px; }
+    .daynav .dlabel { flex:1 1 100%; order:-1; }
+
+    /* Tabs: a vertical list instead of a scroller, active mark moves from
+       an underline to a left bar since there's no edge to fade at this width. */
+    .tabs-wrap::after { display:none; }
+    .tabs { flex-direction:column; width:100%; overflow:visible; scroll-snap-type:none; gap:2px; }
+    .tab { width:100%; text-align:left; padding:11px 12px; border-bottom:none;
+      border-left:2.5px solid transparent; border-radius:0 8px 8px 0; }
+    .tab.active { border-bottom-color:transparent; border-left-color:var(--frost); background:var(--frost-soft); }
+    .tab:not(.active):hover { color:var(--muted); background:var(--surface); }
+
+    /* Right rail: status block + condensed agenda + tasks due today, fixed
+       to the viewport edge and unaffected by which tab is active. It's a
+       DOM child of <header> only so .progress-wrap's markup and IDs stay
+       untouched from the phone layout — position:fixed here escapes
+       header's box entirely, so this still docks to the true right edge. */
+    .rail-right {
+      display:flex; flex-direction:column; gap:22px;
+      position:fixed; top:0; right:0; width:280px; height:100vh;
+      padding:32px 20px; border-left:1px solid var(--line); background:var(--bg);
+      overflow-y:auto; z-index:10;
+    }
+    .progress-wrap { margin-top:0; }
+    #railAgenda, #railTasks { display:block; }
+    .rail-h { font-family:var(--mono); font-size:10.5px; letter-spacing:.14em;
+      text-transform:uppercase; color:var(--faint); margin-bottom:10px; }
+    .rail-row { display:flex; align-items:baseline; gap:10px; padding:7px 0;
+      border-bottom:1px solid var(--line); font-size:12.5px; }
+    .rail-row:last-child { border-bottom:none; }
+    .rail-time { flex-shrink:0; width:44px; font-family:var(--mono);
+      font-variant-numeric:tabular-nums; color:var(--frost); font-weight:600; }
+    .rail-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); }
+    .rail-empty { font-size:12.5px; color:var(--faint); }
+
+    /* The floating + becomes a labelled button docked to the left rail —
+       still position:fixed (robust regardless of the rail's content height,
+       same reasoning as the phone version), just bottom-left of that
+       column instead of bottom-right of the page. */
+    .fab { left:16px; right:auto; bottom:calc(24px + env(safe-area-inset-bottom));
+      width:168px; height:44px; border-radius:10px; display:flex; align-items:center;
+      justify-content:center; gap:6px; font-size:14px; font-weight:700; }
+    .fab-label { display:inline; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+
+    /* Sheets open centred instead of sliding up from the bottom. */
+    .overlay { align-items:center; }
+    .sheet { width:520px; max-width:520px; border-radius:20px; max-height:85vh; }
+
+    /* Month grid: bigger cells with event titles instead of dots-only. */
+    .mgrid { gap:6px; }
+    .cell { aspect-ratio:auto; min-height:110px; align-items:flex-start;
+      padding:8px; border:1px solid var(--line); border-radius:10px; }
+    .cell .num { align-self:flex-start; }
+    .cell-events { display:flex; flex-direction:column; gap:2px; width:100%; margin-top:2px; }
+    .mev { font-size:10.5px; line-height:1.3; padding:2px 5px; border-radius:4px;
+      border-left:2px solid; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--ink); }
+    .mev-more { font-size:9.5px; color:var(--faint); }
+
+    /* Day view: wider hour gutter, taller rows (hourPx() in the script
+       drives the vertical positions to match). */
+    .day-hour { width:64px; }
+    .day-hourline { left:68px; }
+    .day-events { left:72px; }
+
+    /* Hover states — available now that the pointer isn't a thumb. */
+    .row { transition:background-color .15s ease; }
+    .row:hover { background:var(--surface); }
+    .row .acts { opacity:0; transition:opacity .15s ease; }
+    .row:hover .acts, .row:focus-within .acts { opacity:1; }
+  }
+  @media (min-width:900px) and (prefers-reduced-motion: reduce){
+    .row, .row .acts { transition:none; }
+  }
 </style>
 </head>
 <body>
@@ -531,6 +625,7 @@
     <button class="today-btn" onclick="goToday()">Today</button>
     <button onclick="shiftDay(1)">›</button>
   </div>
+  <aside class="rail-right" id="railRight">
   <div class="progress-wrap" id="progWrap">
     <div class="status-head">
       <div class="status-left"><span class="pct" id="pct">0%</span><span class="pct-sub">done</span></div>
@@ -539,6 +634,12 @@
     <div class="eat-track" id="eatTrack"><div class="eat-fill" id="eatFill"></div></div>
     <div class="eat-line" id="eatHead" onclick="openEatSheet()"></div>
   </div>
+  <!-- Desktop-only: populated by renderRail(). Stays hidden on mobile via
+       the [hidden] attribute — the (min-width:900px) query is the only place
+       that turns it back on, so narrowing the window removes it again. -->
+  <div class="rail-section" id="railAgenda" hidden></div>
+  <div class="rail-section" id="railTasks" hidden></div>
+  </aside>
   <div class="tabs-wrap" id="tabsWrap">
     <div class="tabs" id="tabs">
       <button class="tab active" id="tab-agenda" onclick="setTab('agenda')">Agenda</button>
@@ -557,7 +658,7 @@
 <input type="file" id="pdfInput" accept="application/pdf,.pdf" style="display:none">
 <input type="file" id="backupInput" accept=".json" style="display:none">
 
-<button class="fab" onclick="openSheet('add')" aria-label="Add">+</button>
+<button class="fab" onclick="openSheet('add')" aria-label="Add">+<span class="fab-label" hidden>Add</span></button>
 <div class="undo-toast" id="undoToast"></div>
 
 <div class="overlay" id="overlay">
@@ -673,6 +774,13 @@
 <script>
 // Display order is Monday-first to match the month grid; the stored values
 // stay JS day numbers (0 = Sunday).
+// Single source of truth for the (min-width:900px) breakpoint on the JS
+// side — the desktop three-column shell repositions the header and moves
+// pixel-computed layout (day-view hour rows, scroll offsets) that CSS alone
+// can't drive. Every call site below no-ops back to prior behaviour when
+// this is false, so mobile stays untouched.
+const isDesktopLayout=()=>window.matchMedia('(min-width:900px)').matches;
+
 const DOW_ORDER=[1,2,3,4,5,6,0];
 const DOW_LABEL={0:'S',1:'M',2:'T',3:'W',4:'T',5:'F',6:'S'};
 // Key stays 'planning' so existing saved routines keep working; only the label changed.
@@ -1260,7 +1368,9 @@ function renderEatWindow(){
   const wrap=document.getElementById('progWrap');
   if(!head||!track||!wrap) return;
   const now=new Date();
-  const show=sameDay(viewDate,now) && activeTab!=='cal' && activeTab!=='bio';
+  // The status block lives in the right rail at desktop and stays put
+  // regardless of tab; on mobile it still hides on cal/bio, unchanged.
+  const show=sameDay(viewDate,now) && (isDesktopLayout() || (activeTab!=='cal' && activeTab!=='bio'));
   wrap.classList.remove('eat-eating','eat-fasting');
   head.style.display=show?'block':'none';
   track.style.display=show?'block':'none';
@@ -1521,7 +1631,7 @@ function scrollToAnchor(){
   setTimeout(()=>{
     const el=document.getElementById('scrollAnchor');
     if(!el) return;
-    const hh=document.querySelector('header').offsetHeight;
+    const hh=isDesktopLayout()?0:document.querySelector('header').offsetHeight;
     const top=el.getBoundingClientRect().top+window.scrollY-hh-12;
     window.scrollTo({top:Math.max(0,top),behavior:'instant'});
   },0);
@@ -1553,7 +1663,9 @@ function setTab(t){
   // Tasks are not day-scoped and deliberately excluded from the daily
   // percentage, so it hides the day nav and progress bar like cal/bio do.
   const chromeless = (t==='cal'||t==='bio'||t==='tasks');
-  document.getElementById('progWrap').style.display = chromeless?'none':'block';
+  // The right rail keeps the status block visible on every tab at desktop
+  // width (it's a persistent sidebar there, not part of the day header).
+  document.getElementById('progWrap').style.display = (chromeless&&!isDesktopLayout())?'none':'block';
   document.querySelector('.daynav').style.display = chromeless?'none':'flex';
   document.querySelector('.fab').style.display = t==='bio'?'none':'block';
   window.scrollTo(0,0);
@@ -1581,9 +1693,43 @@ function renderFilters(){
 // height, which changes per tab (daynav and the status block show or hide).
 function syncHeaderHeight(){
   const h=document.querySelector('header'); if(!h) return;
-  document.body.style.paddingTop=h.offsetHeight+'px';
+  // At desktop width the header is a full-height left rail, not a top bar,
+  // so there is nothing for body's top padding to clear — leave the
+  // stylesheet's own value (the safe-area inset) in place instead.
+  document.body.style.paddingTop=isDesktopLayout()?'':h.offsetHeight+'px';
 }
-window.addEventListener('resize',syncHeaderHeight);
+window.addEventListener('resize',()=>{ syncHeaderHeight(); renderRail(); });
+
+// Desktop-only right rail: today's agenda and today's open tasks, condensed.
+// Fixed to the actual calendar day, not viewDate — the rail doesn't navigate
+// with the day nav, it's the one thing on screen that always means "today".
+// No-ops on mobile, where #railAgenda/#railTasks stay behind [hidden].
+function renderRail(){
+  if(!isDesktopLayout()) return;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const items=agendaOn(today).slice(0,8);
+  const agBox=document.getElementById('railAgenda');
+  if(agBox){
+    const rows=items.map(a=>{
+      const title=a.kind==='routine'?a.ref.title
+        :a.kind==='supp'?'Supplements · '+a.ref.title
+        :a.ref.title||'Untitled';
+      const t=a.allDay?'All day':a.t;
+      return `<div class="rail-row"><span class="rail-time">${esc(t)}</span><span class="rail-title">${esc(title)}</span></div>`;
+    }).join('');
+    agBox.innerHTML=`<div class="rail-h">Today's agenda</div>`+(rows||'<div class="rail-empty">Nothing today.</div>');
+  }
+  const todayKey=key(today);
+  const due=TASKS.filter(t=>!t.done&&t.date===todayKey)
+    .sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99'));
+  const tBox=document.getElementById('railTasks');
+  if(tBox){
+    const rows=due.map(t=>
+      `<div class="rail-row"><span class="rail-time">${t.time?esc(t.time):'—'}</span><span class="rail-title">${esc(t.title||'Untitled')}</span></div>`
+    ).join('');
+    tBox.innerHTML=`<div class="rail-h">Due today</div>`+(rows||'<div class="rail-empty">Nothing due.</div>');
+  }
+}
 
 function render(){
   renderDate(); renderFilters();
@@ -1594,7 +1740,7 @@ function render(){
   else if(activeTab==='tasks') renderTasks(c);
   else if(activeTab==='cal') renderCalendar(c);
   else renderBio(c);
-  renderProgress(); renderEatWindow(); saveAll();
+  renderProgress(); renderEatWindow(); renderRail(); saveAll();
   syncHeaderHeight();
 }
 
@@ -1988,6 +2134,17 @@ function dotsHTML(f){
   if(f.sport) dots+='<span class="dot sport"></span>';
   return dots;
 }
+// Desktop-width month cells show titles instead of dots; kept behind
+// [hidden] on the wrapper so mobile markup and rendering are unaffected.
+function cellEventsHTML(d){
+  const evs=eventsOn(d), shown=evs.slice(0,3);
+  const previews=shown.map(e=>{
+    const c=eventColor(e);
+    return `<div class="mev" style="background:${hexA(c,0.16)};border-left-color:${c}">${esc(e.title)}</div>`;
+  }).join('');
+  const more=evs.length>shown.length?`<div class="mev-more">+${evs.length-shown.length} more</div>`:'';
+  return previews+more;
+}
 
 function monthBlock(offset){
   const base=new Date(); base.setHours(0,0,0,0); base.setDate(1);
@@ -2007,7 +2164,8 @@ function monthBlock(offset){
     if(sameDay(dt,viewDate)) cls.push('sel');
     if(dt.getDay()===0||dt.getDay()===6) cls.push('wknd');
     cells+=`<button class="${cls.join(' ')}" data-day="${key(dt)}">
-      <span class="num">${d}</span><span class="dots">${dotsHTML(f)}</span></button>`;
+      <span class="num">${d}</span><span class="dots">${dotsHTML(f)}</span>
+      <div class="cell-events" hidden>${cellEventsHTML(dt)}</div></button>`;
   }
   return `<div class="month" id="m${offset}">
       <div class="mhead">${MONTH_NAMES[mo]} <span>${y}</span></div>
@@ -2149,7 +2307,8 @@ function loadEarlier(){
   window.scrollBy(0, after-before);
 }
 
-const HOUR_PX=84;
+const HOUR_PX_MOBILE=84, HOUR_PX_DESKTOP=64;
+const hourPx=()=>isDesktopLayout()?HOUR_PX_DESKTOP:HOUR_PX_MOBILE;
 
 function layoutDay(entries){
   const sorted=[...entries].sort((a,b)=>a.start-b.start||a.end-b.end);
@@ -2177,8 +2336,8 @@ function scrollDayView(){
     const wrap=document.getElementById('dayTimeline'); if(!wrap) return;
     const now=new Date();
     const mins=sameDay(viewDate,now)?(now.getHours()*60+now.getMinutes()):7*60;
-    const hh=document.querySelector('header').offsetHeight;
-    const top=wrap.offsetTop+mins/60*HOUR_PX-hh-40;
+    const hh=isDesktopLayout()?0:document.querySelector('header').offsetHeight;
+    const top=wrap.offsetTop+mins/60*hourPx()-hh-40;
     window.scrollTo({top:Math.max(0,top),behavior:'instant'});
   },0);
 }
@@ -2187,7 +2346,7 @@ function updateNowLine(){
   const el=document.getElementById('nowLine'); if(!el) return;
   if(!sameDay(viewDate,new Date())){ el.remove(); return; }
   const now=new Date();
-  el.style.top=((now.getHours()*60+now.getMinutes())/60*HOUR_PX)+'px';
+  el.style.top=((now.getHours()*60+now.getMinutes())/60*hourPx())+'px';
 }
 
 function renderDayView(c){
@@ -2232,7 +2391,7 @@ function renderDayView(c){
   layoutDay(entries);
 
   const blocksHTML=entries.map(en=>{
-    const top=en.start/60*HOUR_PX, height=Math.max(40,en.dur/60*HOUR_PX);
+    const top=en.start/60*hourPx(), height=Math.max(40,en.dur/60*hourPx());
     const widthPct=100/en.colCount, leftPct=widthPct*en.col;
     const endMin=en.start+en.dur;
     const timeLbl=`${pad(Math.floor(en.start/60)%24)}:${pad(en.start%60)}–${pad(Math.floor(endMin/60)%24)}:${pad(endMin%60)}`;
@@ -2243,12 +2402,13 @@ function renderDayView(c){
     </div>`;
   }).join('');
 
-  const hourLabels=Array.from({length:24},(_,h)=>`<div class="day-hour" style="top:${h*HOUR_PX}px">${pad(h)}:00</div>`).join('');
-  const hourLines=Array.from({length:24},(_,h)=>`<div class="day-hourline" style="top:${h*HOUR_PX}px"></div>`).join('');
-  const nowLine=isToday?`<div class="now-line-day" id="nowLine" style="top:${(new Date().getHours()*60+new Date().getMinutes())/60*HOUR_PX}px"></div>`:'';
+  const hp=hourPx();
+  const hourLabels=Array.from({length:24},(_,h)=>`<div class="day-hour" style="top:${h*hp}px">${pad(h)}:00</div>`).join('');
+  const hourLines=Array.from({length:24},(_,h)=>`<div class="day-hourline" style="top:${h*hp}px"></div>`).join('');
+  const nowLine=isToday?`<div class="now-line-day" id="nowLine" style="top:${(new Date().getHours()*60+new Date().getMinutes())/60*hp}px"></div>`:'';
 
   c.insertAdjacentHTML('beforeend',`
-    <div class="day-timeline" id="dayTimeline" style="height:${24*HOUR_PX}px">
+    <div class="day-timeline" id="dayTimeline" style="height:${24*hp}px">
       ${hourLabels}${hourLines}${nowLine}
       <div class="day-events">${blocksHTML}</div>
     </div>`);
@@ -2711,7 +2871,11 @@ function renderBio(c){
 }
 
 function renderProgress(){
-  if(activeTab==='cal'||activeTab==='bio') return;
+  // Skipping the computation on cal/bio used to be harmless because #pct/#bar
+  // sit inside a display:none progWrap on those tabs. At desktop progWrap
+  // stays visible in the right rail, so the number now has to stay correct
+  // there too — the early return only ever mattered while the block was hidden.
+  if((activeTab==='cal'||activeTab==='bio') && !isDesktopLayout()) return;
   let total,done;
   const mr=marks(state), ms=marks(suppState);
   if(activeTab==='routine'){ const v=activeRoutinesOn(viewDate); total=v.length; done=v.filter(r=>mr[r.id]).length; }
