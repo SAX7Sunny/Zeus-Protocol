@@ -557,11 +557,11 @@
     opacity:.55; transform-origin:50% 100%; transform: rotateX(calc(-1 * var(--tilt)));
     animation: arc-rise .55s cubic-bezier(.34,1.5,.5,1) both; }
   @keyframes arc-rise { from { height:0; opacity:0 } }
-  .arc-head-dot { position:absolute; width:15px; height:15px; border-radius:50%;
-    left:-7.5px; border:2px solid currentColor; transform: rotateX(calc(-1 * var(--tilt)));
+  .arc-head-dot { position:absolute; width:17px; height:17px; border-radius:50%;
+    left:-8.5px; border:2.5px solid currentColor; transform: rotateX(calc(-1 * var(--tilt)));
     transition: transform .18s ease, box-shadow .18s ease;
     animation: arc-pop .5s cubic-bezier(.34,1.6,.5,1) both; cursor:pointer; }
-  /* Invisible expanded hit area — the 15px dot alone is well under a
+  /* Invisible expanded hit area — the dot alone is well under a
      comfortable touch target, and taps were missing it often. This pads
      the tappable zone out without changing what's actually drawn. */
   .arc-head-dot::before { content:''; position:absolute; inset:-13px; }
@@ -592,14 +592,14 @@
   .arc-hud { position:absolute; left:50%; top:42%; transform:translate(-50%,-50%);
     text-align:center; pointer-events:none; animation:arc-fade .8s ease 1.9s both; }
   @keyframes arc-fade { from { opacity:0; transform:translate(-50%,-42%) } }
-  .arc-cap { font-family:var(--mono); font-size:9.5px; letter-spacing:.2em;
-    text-transform:uppercase; color:var(--faint); }
-  .arc-pct { font-family:var(--mono); font-size:38px; font-weight:600; color:var(--moss);
-    font-variant-numeric:tabular-nums; line-height:1; margin:5px 0 6px;
+  .arc-cap { font-family:var(--mono); font-size:10.5px; letter-spacing:.2em;
+    text-transform:uppercase; color:var(--muted); }
+  .arc-pct { font-family:var(--mono); font-size:44px; font-weight:600; color:var(--moss);
+    font-variant-numeric:tabular-nums; line-height:1; margin:6px 0 7px;
     text-shadow:0 0 26px rgba(143,206,138,.35); }
-  .arc-state { font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; }
-  .arc-clock { font-family:var(--mono); font-size:10px; color:var(--muted);
-    margin-top:4px; font-variant-numeric:tabular-nums; }
+  .arc-state { font-family:var(--mono); font-size:11.5px; letter-spacing:.1em; }
+  .arc-clock { font-family:var(--mono); font-size:11px; color:var(--muted);
+    margin-top:5px; font-variant-numeric:tabular-nums; }
 
   /* ---- mobile: opens on demand, full-screen ---- */
   .arc-overlay { display:none; position:fixed; inset:0; background:var(--bg); z-index:35;
@@ -619,7 +619,12 @@
      visually centered via its own max-width + margin:auto. */
   .arc-overlay.open { display:flex; flex-direction:column; justify-content:center; }
   #arcOvStageHost { width:100%; }
-  .arc-overlay .arc-stage { width:100%; max-width:460px; aspect-ratio:1; margin:0 auto; }
+  /* Width alone was the limit here — a phone is much taller than it is
+     wide, and the screenshots showed a lot of unused vertical room above
+     and below a width-capped stage. min(100%, 62vh) lets it grow against
+     whichever is actually smaller, so it fills the screen properly instead
+     of just the screen's width. */
+  .arc-overlay .arc-stage { width:min(100%, 62vh); max-width:540px; aspect-ratio:1; margin:0 auto; }
   .arc-close { position:fixed; top:calc(16px + env(safe-area-inset-top)); right:16px;
     width:36px; height:36px; border-radius:50%; background:var(--surface); border:1px solid var(--line);
     color:var(--ink); font-size:15px; z-index:36; }
@@ -2026,33 +2031,33 @@ function arcBuildStatic(suffix){
   grad.appendChild(svgEl('stop',{offset:'100%','stop-color':'#1b2a26','stop-opacity':'0'}));
   const defs=svgEl('defs'); defs.appendChild(grad); plate.appendChild(defs);
   plate.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:`url(#${gradId})`}));
-  plate.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:'none',stroke:'var(--line)','stroke-width':1}));
+  plate.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:'none',stroke:'var(--line)','stroke-width':1.5}));
   for(let h=0;h<24;h++){
     const major=h%6===0;
     const [x1,y1]=arcPoint(h,ARC_R-(major?12:6)), [x2,y2]=arcPoint(h,ARC_R);
-    plate.appendChild(svgEl('line',{x1,y1,x2,y2,stroke:'var(--line)','stroke-width':major?1.4:1}));
+    plate.appendChild(svgEl('line',{x1,y1,x2,y2,stroke:'var(--line)','stroke-width':major?1.8:1.2}));
     if(major){
       const [lx,ly]=arcPoint(h,ARC_R-30);
       const t=svgEl('text',{x:lx,y:ly,'text-anchor':'middle','dominant-baseline':'middle',
-        fill:'var(--faint)','font-size':11,'font-family':'var(--mono)','letter-spacing':'.08em'});
+        fill:'var(--muted)','font-size':13,'font-weight':600,'font-family':'var(--mono)','letter-spacing':'.08em'});
       t.textContent=String(h).padStart(2,'0');
       plate.appendChild(t);
     }
   }
   const fast=svgEl('path',{d:arcArcPath(EAT_END,EAT_START+24,ARC_R),fill:'none',
-    stroke:'var(--rose)','stroke-width':3,'stroke-linecap':'round',opacity:.26});
+    stroke:'var(--rose)','stroke-width':4,'stroke-linecap':'round',opacity:.3});
   fast.classList.add('arc-draw'); fast.style.setProperty('--arc-len',2*Math.PI*ARC_R);
   plate.appendChild(fast);
   // Placeholder now-hand — arcUpdateNowLine() moves/shows it every refresh
   // without touching the rest of the plate.
   plate.appendChild(svgEl('line',{id:'arcNowLine-'+suffix,x1:ARC_CX,y1:ARC_CY,x2:ARC_CX,y2:ARC_CY,
-    stroke:'var(--rose)','stroke-width':1.5,'stroke-linecap':'round',opacity:.9}));
-  plate.appendChild(svgEl('circle',{id:'arcNowDot-'+suffix,cx:ARC_CX,cy:ARC_CY,r:4,fill:'var(--rose)'}));
+    stroke:'var(--rose)','stroke-width':2,'stroke-linecap':'round',opacity:.9}));
+  plate.appendChild(svgEl('circle',{id:'arcNowDot-'+suffix,cx:ARC_CX,cy:ARC_CY,r:5,fill:'var(--rose)'}));
 
   const band=arcNode('arcBand',suffix); if(band){
     band.innerHTML='';
     const eat=svgEl('path',{d:arcArcPath(EAT_START,EAT_END,ARC_R),fill:'none',
-      stroke:'var(--moss)','stroke-width':7,'stroke-linecap':'round'});
+      stroke:'var(--moss)','stroke-width':8,'stroke-linecap':'round'});
     eat.classList.add('arc-draw'); eat.style.setProperty('--arc-len',2*Math.PI*ARC_R);
     band.appendChild(eat);
   }
@@ -2101,7 +2106,7 @@ function arcBuildPins(suffix,items){
 
     const dot=document.createElement('div');
     dot.className='arc-head-dot'+(it.done?' done':'');
-    dot.style.bottom=(height-7.5)+'px';   // half the dot's 15px height, centers it on the stem tip
+    dot.style.bottom=(height-8.5)+'px';   // half the dot's 17px height, centers it on the stem tip
     dot.style.animationDelay=(1.15+i*0.05)+'s';
     dot.setAttribute('role','button'); dot.setAttribute('tabindex','0');
     dot.setAttribute('aria-label',it.time+' '+it.name);
@@ -2211,7 +2216,7 @@ function arcRefresh(suffix){
       const height=26+(it.done?10:0);
       const dot=p.querySelector('.arc-head-dot'); if(dot) dot.classList.toggle('done',!!it.done);
       const stem=p.querySelector('.arc-stem'); if(stem) stem.style.height=height+'px';
-      if(dot) dot.style.bottom=(height-7.5)+'px';
+      if(dot) dot.style.bottom=(height-8.5)+'px';
       const tag=p.querySelector('.arc-tag'); if(tag) tag.style.bottom=(height-9)+'px';
     });
   }
