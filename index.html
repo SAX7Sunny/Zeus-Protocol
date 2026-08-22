@@ -2053,9 +2053,20 @@ function arcBuildPins(suffix,items){
   arcState[suffix].pinSig=items.map(it=>it.key+it.time).join(',');
 }
 
-function arcHudHTML(items){
-  const total=items.length, done=items.filter(i=>i.done).length;
-  const pct=total?Math.round(done/total*100):0;
+// Same formula as the status block's own #pct (renderProgress()'s default
+// branch: routines + individual supplement items, no tasks) — not the pin
+// list, which also carries supplement *blocks* and tasks and would give a
+// different number than the header the arc sits right next to.
+function arcCompletionPct(){
+  const mr=marks(state), ms=marks(suppState);
+  const vr=activeRoutinesOn(viewDate), vs=allSupps();
+  const total=vr.length+vs.length;
+  const done=vr.filter(r=>mr[r.id]).length+vs.filter(s=>ms[s.id]).length;
+  return {total,done,pct:total?Math.round(done/total*100):0};
+}
+
+function arcHudHTML(){
+  const {total,done,pct}=arcCompletionPct();
   const isToday=sameDay(viewDate,new Date());
   if(isToday){
     const now=new Date(), st=eatingState(now);
@@ -2108,7 +2119,7 @@ function arcRefresh(suffix){
     });
   }
   arcUpdateNowLine(suffix);
-  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML(items);
+  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML();
 }
 
 function arcBuildFull(suffix){
@@ -2122,7 +2133,7 @@ function arcBuildFull(suffix){
   const items=arcItems();
   arcBuildPins(suffix,items);
   arcUpdateNowLine(suffix);
-  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML(items);
+  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML();
   arcState[suffix].built=true;
 }
 
@@ -2143,7 +2154,7 @@ function arcTick(){
   const suffix=isDesktopLayout()?'rail':(arcMobileOpen?'ov':null);
   if(!suffix||!arcState[suffix].built) return;
   arcUpdateNowLine(suffix);
-  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML(arcItems());
+  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML();
 }
 function arcOnResize(){
   if(isDesktopLayout()){ if(arcState.rail.built) arcBuildPins('rail',arcItems()); }
