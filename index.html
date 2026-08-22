@@ -598,18 +598,42 @@
      were getting stuck open after every tap. Desktop's real mouse hover is
      unaffected; dot.blur() in the click handler is the belt-and-suspenders
      version of this for browsers that do focus a tapped element. */
-  .arc-pin:hover .arc-head-dot {
-    transform: rotateX(calc(-1 * var(--tilt))) scale(1.45); box-shadow:0 0 16px currentColor; }
-  .arc-tag { position:absolute; left:14px; white-space:nowrap; opacity:0;
+  /* Hover effects are gated behind (hover:hover). iOS Safari applies :hover
+     on tap and has no "unhover" gesture, so on a phone these were sticking
+     on after every tap — which is how a clipped label ended up parked on
+     screen. Touch gets the deterministic .sel path below instead. */
+  @media (hover:hover){
+    .arc-pin:hover .arc-head-dot {
+      transform: rotateX(calc(-1 * var(--tilt))) scale(1.45); box-shadow:0 0 16px currentColor; }
+    .arc-pin:hover .arc-tag { opacity:1; }
+  }
+  .arc-tag { position:absolute; left:14px; opacity:0;
     transform: rotateX(calc(-1 * var(--tilt))) rotateZ(calc(-1 * var(--spin,0deg)));
-    transform-origin:0 50%; font-family:var(--mono); font-size:10.5px; letter-spacing:.06em;
-    background:var(--surface); border:1px solid var(--line); padding:5px 9px; border-radius:7px;
-    color:var(--ink); transition:opacity .16s ease; pointer-events:none; }
-  /* Flipped for pins on the right half of the ring (set in JS, from which
-     side of centre the pin actually falls on) — otherwise the tag always
-     grows rightward and runs off-screen for anything past ~3 o'clock. */
-  .arc-tag.flip { left:auto; right:14px; transform-origin:100% 50%; }
-  .arc-pin:hover .arc-tag { opacity:1; }
+    transform-origin:0 50%; font-family:var(--mono); font-size:11.5px; letter-spacing:.04em;
+    background:var(--surface); border:1px solid rgba(95,216,245,.4); padding:6px 10px;
+    border-radius:0; color:var(--ink); transition:opacity .16s ease; pointer-events:none;
+    /* Wrap instead of nowrap, and cap the width: a long name on a node near
+       the rim used to run straight off the stage and get clipped by the
+       overlay's overflow-x. width:max-content keeps short labels tight. */
+    white-space:normal; width:max-content; max-width:min(46vw, 200px);
+    line-height:1.35; text-align:left;
+    box-shadow:0 4px 14px rgba(0,0,0,.5); }
+  /* Flipped for pins on the right half of the ring (set in JS from the pin's
+     actual x), so the label always grows INWARD, toward the middle of the
+     stage, rather than off whichever edge it happens to sit near. */
+  .arc-tag.flip { left:auto; right:14px; transform-origin:100% 50%; text-align:right; }
+  /* Selected node keeps its label up — the reliable path on touch, and it
+     lifts above neighbouring pins so nothing overlaps the text. */
+  .arc-pin.sel { z-index:6; }
+  .arc-pin.sel .arc-tag { opacity:1; }
+  /* ...and the day summary steps aside while a node is selected. A label on
+     a left- or right-rim node grows inward (that is what keeps it on
+     screen), which means it necessarily crosses the middle — where it
+     landed straight on top of the percentage. display, not opacity: the
+     readout's entrance animation uses fill-mode both and would otherwise
+     fight a transitioned opacity. Nothing is lost — the card below carries
+     the detail, and clearing the selection brings the summary right back. */
+  .arc-stage.has-sel .arc-hud { display:none; }
 
   /* Always the day summary now, and always click-through: detail moved out
      to its own card, so nothing in the middle of the disc can swallow a tap
@@ -2479,6 +2503,8 @@ function arcRenderDetail(){
 function arcMarkSelected(){
   ['rail','ov'].forEach(s=>{
     if(!arcState[s].built) return;
+    const stage=arcNode('arcStage',s);
+    if(stage) stage.classList.toggle('has-sel', arcSelected!==null);
     const pinsBox=arcNode('arcPins',s); if(!pinsBox) return;
     [...pinsBox.children].forEach(p=>
       p.classList.toggle('sel', arcSelected!==null && p.dataset.key===arcSelected));
