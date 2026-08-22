@@ -585,7 +585,14 @@
   /* ---- mobile: opens on demand, full-screen ---- */
   .arc-overlay { display:none; position:fixed; inset:0; background:var(--bg); z-index:35;
     overflow-y:auto; padding:calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom)); }
-  .arc-overlay.open { display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  /* align-items default (stretch), not center: a centered flex item has no
+     definite cross-axis size, so .arc-stage's width:100% below had nothing
+     real to resolve against and rendered oversized (WebKit in particular
+     falls back to something far bigger than the viewport). Stretching
+     #arcOvStageHost gives it a real width — .arc-stage still ends up
+     visually centered via its own max-width + margin:auto. */
+  .arc-overlay.open { display:flex; flex-direction:column; justify-content:center; }
+  #arcOvStageHost { width:100%; }
   .arc-overlay .arc-stage { width:100%; max-width:420px; aspect-ratio:1; margin:0 auto; }
   .arc-close { position:fixed; top:calc(16px + env(safe-area-inset-top)); right:16px;
     width:36px; height:36px; border-radius:50%; background:var(--surface); border:1px solid var(--line);
