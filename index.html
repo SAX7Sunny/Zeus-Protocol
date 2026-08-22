@@ -540,6 +540,9 @@
        in the mobile overlay and the desktop rail, not just past 900px. */
     .arc-disc, .arc-draw, .arc-stem, .arc-head-dot, .arc-hud { animation:none !important; opacity:1 !important; }
     .arc-draw { stroke-dashoffset:0 !important; }
+    /* The radar sweep is ambient motion with no informational content, so
+       it goes away entirely rather than being frozen mid-rotation. */
+    #arcOvStageHost .arc-sweep { animation:none !important; display:none !important; }
   }
 
   /* ================= Day Arc (ported from day-arc-3d.html) =================
@@ -609,7 +612,11 @@
   .arc-pin:hover .arc-tag { opacity:1; }
 
   .arc-hud { position:absolute; left:50%; top:42%; transform:translate(-50%,-50%);
-    text-align:center; pointer-events:none; animation:arc-fade .8s ease 1.9s both; }
+    text-align:center; pointer-events:none; animation:arc-fade .8s ease 1.9s both;
+    width:min(66%, 215px); }
+  /* The detail readout needs to be clickable; the summary must not be, or it
+     would swallow taps meant for pins behind it. */
+  .arc-hud.detail { pointer-events:auto; }
   @keyframes arc-fade { from { opacity:0; transform:translate(-50%,-42%) } }
   .arc-cap { font-family:var(--mono); font-size:10.5px; letter-spacing:.2em;
     text-transform:uppercase; color:var(--muted); }
@@ -619,6 +626,53 @@
   .arc-state { font-family:var(--mono); font-size:11.5px; letter-spacing:.1em; }
   .arc-clock { font-family:var(--mono); font-size:11px; color:var(--muted);
     margin-top:5px; font-variant-numeric:tabular-nums; }
+  /* "What's next" is the single most useful thing for a glance at the day,
+     so it earns the line the redundant wall-clock used to hold. */
+  .arc-next { margin-top:9px; padding-top:8px; border-top:1px solid var(--line);
+    font-family:var(--mono); font-size:11px; color:var(--frost);
+    display:flex; gap:6px; justify-content:center; align-items:baseline; }
+  .arc-next .nt { font-variant-numeric:tabular-nums; font-weight:700; flex-shrink:0; }
+  .arc-next .nn { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ---- centre detail readout (tap a node) ---- */
+  .arc-d-time { font-family:var(--mono); font-size:12px; font-weight:700; color:var(--frost);
+    letter-spacing:.1em; text-shadow:var(--glow-soft); }
+  .arc-d-name { font-size:14.5px; font-weight:600; color:var(--ink); line-height:1.25;
+    margin-top:4px; max-height:2.5em; overflow:hidden; }
+  .arc-d-meta { display:flex; gap:6px; justify-content:center; align-items:center;
+    margin-top:7px; flex-wrap:wrap; }
+  .arc-d-tag { font-family:var(--mono); font-size:9px; letter-spacing:.12em;
+    text-transform:uppercase; border:1px solid currentColor; padding:2px 6px; font-weight:700; }
+  .arc-d-status { font-family:var(--mono); font-size:9px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--faint); }
+  .arc-d-status.on { color:var(--moss); }
+  .arc-d-acts { display:flex; gap:6px; margin-top:11px; }
+  .arc-d-acts button {
+    flex:1; font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+    font-weight:700; padding:9px 4px; border:1px solid var(--line); background:var(--surface);
+    color:var(--ink); border-radius:0;
+    clip-path:polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+  .arc-d-acts .pri { background:var(--frost-soft); border-color:rgba(95,216,245,.45); color:var(--frost); }
+  .arc-d-acts .pri.undo { background:rgba(79,230,176,.14); border-color:rgba(79,230,176,.45); color:var(--moss); }
+  .arc-d-close { position:absolute; top:-26px; left:50%; transform:translateX(-50%);
+    width:24px; height:24px; border-radius:50%; border:1px solid var(--line);
+    background:var(--surface); color:var(--muted); font-size:11px; line-height:1;
+    display:grid; place-items:center; }
+
+  /* Selected node reads as locked-on: a ring around it, always lit. */
+  .arc-pin.sel .arc-head-dot {
+    transform: rotateX(calc(-1 * var(--tilt))) scale(1.35);
+    box-shadow:0 0 0 3px rgba(95,216,245,.30), 0 0 16px currentColor; }
+
+  /* Radar sweep — the one piece of ambient motion. Scoped to the mobile
+     overlay only: the desktop rail arc is on screen the whole session, and a
+     perpetual sweep there is a distraction rather than atmosphere. */
+  @keyframes arc-sweep { to { transform:rotate(360deg); } }
+  /* Origin is 0 0 because the wedge is drawn around its own origin inside a
+     group already translated to the hub — no transform-box needed. */
+  #arcOvStageHost .arc-sweep { transform-origin:0 0; animation:arc-sweep 7s linear infinite; }
+  /* The rail copy renders the wedge but never spins it. */
+  .arc-sweep { transform-origin:0 0; }
 
   /* ---- mobile: opens on demand, full-screen ---- */
   .arc-overlay { display:none; position:fixed; inset:0; background:var(--bg); z-index:35;
@@ -829,8 +883,13 @@
        exaggerated tilt at 240px, so a bigger number flattens it back down. */
     #arcRailWrap { display:block; margin-bottom:2px; }
     #arcRailWrap .arc-stage { width:100%; max-width:240px; aspect-ratio:1; margin:0 auto; perspective:2000px; }
-    #arcRailWrap .arc-hud { top:44%; }
+    #arcRailWrap .arc-hud { top:44%; width:min(74%, 168px); }
     #arcRailWrap .arc-pct { font-size:26px; margin:4px 0 4px; }
+    /* The rail stage is 240px, so the readout tightens to match. */
+    #arcRailWrap .arc-next { margin-top:6px; padding-top:5px; font-size:10px; }
+    #arcRailWrap .arc-d-name { font-size:13px; }
+    #arcRailWrap .arc-d-acts { flex-direction:column; gap:4px; margin-top:8px; }
+    #arcRailWrap .arc-d-acts button { padding:7px 4px; }
     /* No longer a tappable trigger — the arc is already on screen. */
     .rail-right .progress-wrap { cursor:default; }
     .rail-right .progress-wrap:active { background:none; }
@@ -2095,18 +2154,25 @@ function arcItems(){
   const routines=activeRoutinesOn(viewDate).map(r=>({
     key:'r:'+r.id, time:r.time, name:r.title,
     colorVar:ARC_CAT_COLOR[r.cat]||'frost', done:!!mr[r.id],
-    tap:()=>arcOpenRoutine(r.id)
+    catLabel:LABEL[r.cat]||'Routine',
+    toggle:()=>{ const m=marks(state); m[r.id]=!m[r.id]; render(); },
+    edit:()=>arcOpenRoutine(r.id)
   }));
   const supps=SUPP_BLOCKS.filter(b=>b.items.length).map(b=>({
     key:'s:'+b.id, time:b.time, name:'Supplements · '+b.title,
     colorVar:'frost', done:b.items.every(i=>ms[i.id]),
-    tap:()=>arcOpenSupp()
+    catLabel:'Stack',
+    toggle:()=>{ const m=marks(suppState); const all=b.items.every(i=>m[i.id]);
+      b.items.forEach(i=>m[i.id]=!all); render(); },
+    edit:()=>arcOpenSupp()
   }));
   const dayKey=key(viewDate);
   const tasks=visibleTasks().filter(t=>t.time&&t.date===dayKey).map(t=>({
     key:'t:'+t.id, time:t.time, name:t.title||'Untitled',
     colorVar:'amber', done:!!t.done,
-    tap:()=>arcOpenTask(t.id)
+    catLabel:'Task',
+    toggle:()=>toggleTask(t.id),
+    edit:()=>arcOpenTask(t.id)
   }));
   return [...routines,...supps,...tasks].sort((a,b)=>a.time.localeCompare(b.time));
 }
@@ -2138,8 +2204,28 @@ function arcBuildStatic(suffix){
   const grad=svgEl('radialGradient',{id:gradId});
   grad.appendChild(svgEl('stop',{offset:'0%','stop-color':'#0d1822','stop-opacity':'.85'}));
   grad.appendChild(svgEl('stop',{offset:'100%','stop-color':'#0d1822','stop-opacity':'0'}));
-  const defs=svgEl('defs'); defs.appendChild(grad); plate.appendChild(defs);
+  // Radar sweep gradient: transparent at the hub, faint cyan at the rim, so
+  // the wedge reads as a beam rather than a pie slice.
+  const sweepId='arcSweepGrad-'+suffix;
+  const sg=svgEl('radialGradient',{id:sweepId});
+  sg.appendChild(svgEl('stop',{offset:'0%','stop-color':'#5fd8f5','stop-opacity':'0'}));
+  sg.appendChild(svgEl('stop',{offset:'100%','stop-color':'#5fd8f5','stop-opacity':'0.20'}));
+  const defs=svgEl('defs'); defs.appendChild(grad); defs.appendChild(sg); plate.appendChild(defs);
   plate.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:`url(#${gradId})`}));
+  // 55° wedge, spun by CSS. Sits under the ticks and the ring so it never
+  // competes with anything that carries information.
+  // Two nested groups on purpose: the outer one is translated to the hub via
+  // an SVG attribute, and the wedge inside is drawn around (0,0), so the CSS
+  // rotation needs no transform-origin and no transform-box support to spin
+  // about the right point.
+  const hub=svgEl('g',{transform:`translate(${ARC_CX},${ARC_CY})`});
+  const sweep=svgEl('g',{class:'arc-sweep'});
+  const rel=(h)=>{ const a=arcAngle(h)*Math.PI/180; return [ARC_R*Math.cos(a),ARC_R*Math.sin(a)]; };
+  const [sx,sy]=rel(0), [ex,ey]=rel(55/15);
+  sweep.appendChild(svgEl('path',{
+    d:`M 0 0 L ${sx} ${sy} A ${ARC_R} ${ARC_R} 0 0 1 ${ex} ${ey} Z`,
+    fill:`url(#${sweepId})`}));
+  hub.appendChild(sweep); plate.appendChild(hub);
   plate.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:'none',stroke:'var(--line)','stroke-width':1.5}));
   for(let h=0;h<24;h++){
     const major=h%6===0;
@@ -2230,8 +2316,12 @@ function arcBuildPins(suffix,items){
     dot.style.animationDelay=(1.15+i*0.05)+'s';
     dot.setAttribute('role','button'); dot.setAttribute('tabindex','0');
     dot.setAttribute('aria-label',it.time+' '+it.name);
-    dot.onclick=()=>{ dot.blur(); it.tap(); };
-    dot.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); it.tap(); } };
+    // Tapping a node now selects it and shows the centre readout, rather
+    // than jumping straight into the edit sheet. On touch there is no hover,
+    // so the old tag never appeared and the detail was effectively invisible;
+    // the sheet is still one tap away, from the readout's Edit button.
+    dot.onclick=()=>{ dot.blur(); arcSelect(it.key); };
+    dot.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); arcSelect(it.key); } };
 
     const tag=document.createElement('div');
     tag.className='arc-tag'+(x>ARC_CX?' flip':''); tag.textContent=it.time+'  '+it.name;
@@ -2255,9 +2345,21 @@ function arcCompletionPct(){
   return {total,done,pct:total?Math.round(done/total*100):0};
 }
 
+// The next still-open item on the ring, which is the one thing a glance at
+// the day is usually looking for. Only meaningful for today.
+function arcNextUp(){
+  if(!sameDay(viewDate,new Date())) return null;
+  const now=new Date(), h=now.getHours()+now.getMinutes()/60;
+  return arcItems().find(it=>!it.done && arcHours(it.time)>=h) || null;
+}
+
 function arcHudHTML(){
   const {total,done,pct}=arcCompletionPct();
   const isToday=sameDay(viewDate,new Date());
+  const nx=arcNextUp();
+  const nextRow=nx
+    ? `<div class="arc-next"><span class="nt">${esc(nx.time)}</span><span class="nn">${esc(nx.name)}</span></div>`
+    : '';
   if(isToday){
     const now=new Date(), st=eatingState(now);
     const leftLbl=st.left.toFixed(1).replace('.0','')+'H';
@@ -2265,13 +2367,60 @@ function arcHudHTML(){
       <div class="arc-pct">${pct}%</div>
       <div class="arc-state" style="color:${st.mode==='eating'?'var(--moss)':'var(--rose)'}">
         ${st.mode==='eating'?'EATING · '+leftLbl+' LEFT':'FASTING'}</div>
-      <div class="arc-clock">${pad(now.getHours())}:${pad(now.getMinutes())} · ${done}/${total} done</div>`;
+      <div class="arc-clock">${done}/${total} done</div>${nextRow}`;
   }
   const lbl=viewDate.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
   return `<div class="arc-cap">${esc(lbl)}</div>
     <div class="arc-pct">${pct}%</div>
     <div class="arc-state" style="color:var(--muted)">COMPLETION</div>
     <div class="arc-clock">${done}/${total} done</div>`;
+}
+
+/* ---- centre detail readout ----
+   arcSelected holds a pin key. Everything reads through arcItems() rather
+   than caching the item, so a toggle elsewhere (or a re-render) keeps the
+   panel truthful instead of showing a stale done-state. */
+let arcSelected=null;
+
+function arcSelect(k){ arcSelected=(arcSelected===k)?null:k; arcRenderCentreAll(); }
+function arcClearSelection(){ if(arcSelected===null) return; arcSelected=null; arcRenderCentreAll(); }
+function arcSelectedItem(){
+  return arcSelected ? arcItems().find(it=>it.key===arcSelected)||null : null;
+}
+// Fires the action, then re-renders: toggle() calls render(), which reaches
+// arcRefresh() and repaints both the ring and this panel.
+function arcDetailToggle(){ const it=arcSelectedItem(); if(it) it.toggle(); }
+function arcDetailEdit(){ const it=arcSelectedItem(); if(it) it.edit(); }
+
+function arcDetailHTML(it){
+  return `<button class="arc-d-close" onclick="arcClearSelection()" aria-label="Back to day summary">✕</button>
+    <div class="arc-d-time">${esc(it.time)}</div>
+    <div class="arc-d-name">${esc(it.name)}</div>
+    <div class="arc-d-meta">
+      <span class="arc-d-tag" style="color:var(--${it.colorVar})">${esc(it.catLabel)}</span>
+      <span class="arc-d-status${it.done?' on':''}">${it.done?'Done':'Pending'}</span>
+    </div>
+    <div class="arc-d-acts">
+      <button class="pri${it.done?' undo':''}" onclick="arcDetailToggle()">${it.done?'↺ Undo':'✓ Done'}</button>
+      <button onclick="arcDetailEdit()">Edit</button>
+    </div>`;
+}
+
+function arcRenderCentre(suffix){
+  const hud=arcNode('arcHud',suffix); if(!hud) return;
+  const it=arcSelectedItem();
+  hud.classList.toggle('detail',!!it);
+  hud.innerHTML=it?arcDetailHTML(it):arcHudHTML();
+  // Mark the matching pin as locked-on.
+  const pinsBox=arcNode('arcPins',suffix);
+  if(pinsBox) [...pinsBox.children].forEach(p=>
+    p.classList.toggle('sel',!!it && p.dataset.key===it.key));
+}
+// Both instances stay in sync — the desktop rail and the mobile overlay can
+// legitimately be built at the same time when the window is resized across
+// the breakpoint mid-session.
+function arcRenderCentreAll(){
+  ['rail','ov'].forEach(s=>{ if(arcState[s].built) arcRenderCentre(s); });
 }
 
 // Mobile overlay only — the desktop rail already has its own "Due today"
@@ -2341,7 +2490,7 @@ function arcRefresh(suffix){
     });
   }
   arcUpdateNowLine(suffix);
-  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML();
+  arcRenderCentre(suffix);
   if(suffix==='ov') arcRenderTaskList();
 }
 
@@ -2356,7 +2505,7 @@ function arcBuildFull(suffix){
   const items=arcItems();
   arcBuildPins(suffix,items);
   arcUpdateNowLine(suffix);
-  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML();
+  arcRenderCentre(suffix);
   if(suffix==='ov') arcRenderTaskList();
   arcState[suffix].built=true;
 }
@@ -2378,7 +2527,7 @@ function arcTick(){
   const suffix=isDesktopLayout()?'rail':(arcMobileOpen?'ov':null);
   if(!suffix||!arcState[suffix].built) return;
   arcUpdateNowLine(suffix);
-  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML();
+  arcRenderCentre(suffix);
 }
 function arcOnResize(){
   if(isDesktopLayout()){ if(arcState.rail.built) arcBuildPins('rail',arcItems()); }
@@ -2405,13 +2554,20 @@ function arcOpenMobile(){
 function arcCloseMobile(){
   if(!arcMobileOpen) return;
   arcMobileOpen=false;
+  arcSelected=null;   // reopen on the day summary, not on whatever was last tapped
   document.getElementById('arcOverlay').classList.remove('open');
   document.body.style.overflow='';
 }
 function arcOverlayTap(e){
   if(e.target.id==='arcOverlay') arcCloseMobile();   // tap outside the stage/close button
 }
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&arcMobileOpen) arcCloseMobile(); });
+// Escape unwinds one level at a time: an open node readout first, the whole
+// overlay only once nothing is selected.
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  if(arcSelected!==null){ arcClearSelection(); return; }
+  if(arcMobileOpen) arcCloseMobile();
+});
 
 document.getElementById('arcRailWrap').innerHTML=arcStageHTML('rail');
 document.getElementById('arcOvStageHost').innerHTML=arcStageHTML('ov');
