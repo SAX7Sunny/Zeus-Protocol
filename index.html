@@ -2158,16 +2158,26 @@ function arcRenderTaskList(){
   const box=document.getElementById('arcTaskList');
   if(!box) return;
   const dayKey=key(viewDate);
-  const tasks=visibleTasks().filter(t=>t.date===dayKey)
+  let tasks=visibleTasks().filter(t=>t.date===dayKey)
     .sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+  let heading='Scheduled';
+  // Nothing on the day being viewed — fall back to the single nearest
+  // upcoming dated task instead of just leaving the strip empty.
+  if(!tasks.length){
+    const upcoming=visibleTasks().filter(t=>t.date&&t.date>dayKey)
+      .sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''));
+    if(upcoming.length){ tasks=[upcoming[0]]; heading='Next up'; }
+  }
   if(!tasks.length){ box.hidden=true; box.innerHTML=''; return; }
   box.hidden=false;
-  box.innerHTML=`<div class="arc-tl-h">Scheduled</div>
-    <div class="arc-tl-scroll">${tasks.map(t=>
-      `<button class="arc-tl-row${t.done?' done':''}" data-id="${t.id}">
-        <span class="arc-tl-time">${t.time?esc(t.time):'All day'}</span>
+  box.innerHTML=`<div class="arc-tl-h">${heading}</div>
+    <div class="arc-tl-scroll">${tasks.map(t=>{
+      const timeLbl=t.date===dayKey?(t.time?esc(t.time):'All day'):esc(taskDateLabel(t));
+      return `<button class="arc-tl-row${t.done?' done':''}" data-id="${t.id}">
+        <span class="arc-tl-time">${timeLbl}</span>
         <span>${esc(t.title||'Untitled')}</span>
-      </button>`).join('')}</div>`;
+      </button>`;
+    }).join('')}</div>`;
   box.querySelectorAll('[data-id]').forEach(b=>{ b.onclick=()=>arcOpenTask(b.dataset.id); });
 }
 
