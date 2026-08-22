@@ -831,6 +831,62 @@
   .link-btn { width:100%; margin-top:6px; padding:12px; border-radius:10px; background:var(--frost-soft);
     color:var(--frost); border:none; font-size:14px; font-weight:600; }
 
+  /* ---------- cold-open briefing ---------- */
+  .boot { position:fixed; inset:0; z-index:60; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:32px 24px; gap:22px;
+    background-image:
+      repeating-linear-gradient(rgba(95,216,245,.045) 0 1px, transparent 1px 3px),
+      radial-gradient(90% 60% at 50% 45%, rgba(95,216,245,.12), transparent 70%);
+  }
+  .boot[hidden] { display:none; }
+  .boot.out { animation:boot-out .45s ease forwards; }
+  @keyframes boot-out { to { opacity:0; visibility:hidden; } }
+  .boot-inner { width:100%; max-width:420px; display:flex; flex-direction:column; gap:10px; }
+  .boot-line { font-family:var(--mono); opacity:0; animation:boot-in .42s ease forwards; }
+  @keyframes boot-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  .boot-mark { font-size:26px; font-weight:700; letter-spacing:.16em; color:var(--frost);
+    text-shadow:0 0 24px rgba(95,216,245,.55); }
+  .boot-rule { height:1px; background:linear-gradient(90deg,var(--frost),transparent);
+    opacity:0; animation:boot-rule .5s ease forwards; transform-origin:0 50%; }
+  @keyframes boot-rule { from { opacity:0; transform:scaleX(0);} to { opacity:.8; transform:none; } }
+  .boot-meta { font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); }
+  .boot-stat { font-size:15px; color:var(--ink); display:flex; gap:10px; align-items:baseline; }
+  .boot-stat b { font-size:22px; font-weight:600; color:var(--moss);
+    font-variant-numeric:tabular-nums; text-shadow:0 0 20px rgba(79,230,176,.35); }
+  .boot-next { font-size:13.5px; color:var(--frost); }
+  .boot-next span { color:var(--muted); }
+  .boot-skip { font-family:var(--mono); font-size:9.5px; letter-spacing:.18em;
+    text-transform:uppercase; color:var(--faint); }
+  @media (prefers-reduced-motion: reduce){
+    .boot-line, .boot-rule { animation:none; opacity:1; transform:none; }
+    .boot.out { animation:none; display:none; }
+  }
+
+  /* ---------- systems readout ---------- */
+  .sysblock { margin:6px 6px 14px; background:var(--surface); border:1px solid var(--line);
+    border-left:3px solid var(--moss); }
+  .sysblock.watch { border-left-color:var(--amber); }
+  .sysblock.warn  { border-left-color:var(--rose); }
+  .sys-head { display:flex; align-items:center; gap:9px; width:100%; padding:11px 13px;
+    background:none; border:0; color:var(--ink); text-align:left; border-radius:0; }
+  .sys-title { font-family:var(--mono); font-size:10.5px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--muted); flex-shrink:0; }
+  .sys-headline { font-family:var(--mono); font-size:11.5px; color:var(--ink);
+    flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sys-caret { color:var(--faint); font-size:10px; flex-shrink:0; }
+  .sys-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; background:var(--moss);
+    box-shadow:0 0 8px currentColor; color:var(--moss); }
+  .sys-dot.watch { background:var(--amber); color:var(--amber); }
+  .sys-dot.warn  { background:var(--rose);  color:var(--rose); }
+  .sys-rows { padding:2px 13px 11px; display:flex; flex-direction:column; gap:1px; }
+  .sys-row { display:flex; align-items:center; gap:9px; padding:7px 0;
+    border-top:1px solid var(--line); font-size:12.5px; }
+  .sys-label { color:var(--ink); flex-shrink:0; }
+  .sys-detail { font-family:var(--mono); font-size:11px; color:var(--muted);
+    margin-left:auto; text-align:right; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
   /* ---------- blood pressure ---------- */
   .bp-card { margin:10px 6px 14px; padding:14px 15px; background:var(--surface);
     border:1px solid var(--line); }
@@ -1091,7 +1147,7 @@
       <div class="eyebrow">ZEUS Protocol</div>
       <h1 id="pageTitle">Agenda</h1>
     </div>
-    <div class="logo" aria-label="ZEVS">Z&#931;VS</div>
+    <button class="logo" aria-label="Replay briefing" onclick="bootReplay()">Z&#931;VS</button>
   </div>
   <div class="daynav">
     <button onclick="shiftDay(-1)">‹</button>
@@ -1148,6 +1204,13 @@
      below lays out (stacked vs. side-by-side), which is CSS, not markup.
      Fixed view (no drag), so nothing here captures the pointer — this
      element scrolls normally and taps reach the pins uninterrupted. -->
+<!-- Cold-open briefing. Shown once a day, dismissable by tapping anywhere,
+     and never blocking: the app underneath is already rendered behind it. -->
+<div class="boot" id="boot" hidden onclick="bootDismiss()">
+  <div class="boot-inner" id="bootInner"></div>
+  <div class="boot-skip">Tap to dismiss</div>
+</div>
+
 <div class="arc-overlay" id="arcOverlay" onclick="arcOverlayTap(event)">
   <button class="arc-close" onclick="arcCloseOverlay()" aria-label="Close day arc">✕</button>
   <!-- Populated by arcRenderTaskList(); hidden via the DOM property (not
@@ -3086,9 +3149,99 @@ function renderTasks(c){
   bindTaskRows(c);
 }
 
+/* ---------- SYSTEMS ----------
+   A diagnostics readout in the Jarvis sense: named subsystems, each with a
+   state, reported without being asked. Everything here is derived from data
+   the app already holds — nothing new is tracked — and the point is to
+   surface neglect you would otherwise have to go looking for. */
+const SYS_ORDER=['ok','watch','warn'];
+function systemsReport(){
+  const out=[];
+  const mr=marks(state), ms=marks(suppState);
+
+  const vr=activeRoutinesOn(viewDate), rd=vr.filter(r=>mr[r.id]).length;
+  out.push({key:'routine', label:'Routine',
+    detail:vr.length?rd+'/'+vr.length+' complete':'nothing scheduled',
+    state: !vr.length?'ok' : rd===vr.length?'ok' : rd/vr.length>=0.5?'watch':'warn'});
+
+  const vs=allSupps(), sd=vs.filter(s=>ms[s.id]).length;
+  out.push({key:'supps', label:'Supplements',
+    detail:vs.length?sd+'/'+vs.length+' taken':'none configured',
+    state: !vs.length?'ok' : sd===vs.length?'ok' : sd/vs.length>=0.5?'watch':'warn'});
+
+  // Only meaningful for today — a past or future day has no "now" to be in.
+  if(sameDay(viewDate,new Date())){
+    const st=eatingState(new Date());
+    out.push({key:'fast', label:st.mode==='eating'?'Eating window':'Fasting',
+      detail:hm(st.left)+(st.mode==='eating'?' remaining':' until window opens'),
+      state:'ok'});
+  }
+
+  const overdue=visibleTasks().filter(t=>taskOverdue(t)).length;
+  const dueToday=visibleTasks().filter(t=>!t.done&&t.date===key(viewDate)).length;
+  out.push({key:'tasks', label:'Tasks',
+    detail: overdue?overdue+' overdue' : dueToday?dueToday+' due today' : 'clear',
+    state: overdue?'warn' : dueToday?'watch' : 'ok'});
+
+  // Days since the newest panel. PANELS is date-sorted, so the last is newest.
+  if(PANELS.length){
+    const last=PANELS[PANELS.length-1];
+    const days=Math.floor((dayStart(new Date())-dayStart(new Date(last.date)))/86400000);
+    out.push({key:'bio', label:'Biomarkers',
+      detail:days+' day'+(days===1?'':'s')+' since panel',
+      state: days>240?'warn' : days>180?'watch' : 'ok'});
+  } else {
+    out.push({key:'bio', label:'Biomarkers', detail:'no panel on file', state:'watch'});
+  }
+
+  if(BP.length){
+    const days=Math.floor((dayStart(new Date())-dayStart(new Date(bpLatest().ts)))/86400000);
+    const b=bpBand(bpLatest());
+    out.push({key:'bp', label:'Blood pressure',
+      detail:bpLatest().sys+'/'+bpLatest().dia+' · '+(days===0?'today':days+'d ago'),
+      state: b.cls==='high'?'warn' : b.cls==='ok'?'ok':'watch'});
+  }
+
+  if(SUBS.length){
+    const bad=SUBS.filter(s=>s.status==='err').length;
+    out.push({key:'cal', label:'Calendar feeds',
+      detail: bad?bad+' of '+SUBS.length+' failing' : SUBS.length+' syncing',
+      state: bad?'warn':'ok'});
+  }
+  return out;
+}
+
+function systemsHTML(){
+  const rows=systemsReport();
+  const worst=rows.reduce((w,r)=>SYS_ORDER.indexOf(r.state)>SYS_ORDER.indexOf(w)?r.state:w,'ok');
+  const headline={ok:'All systems nominal',watch:'Minor deviations',warn:'Attention required'}[worst];
+  return `<div class="sysblock ${worst}" id="sysBlock">
+    <button class="sys-head" onclick="sysToggle()" aria-expanded="${sysOpen}">
+      <span class="sys-dot ${worst}"></span>
+      <span class="sys-title">Systems</span>
+      <span class="sys-headline">${headline}</span>
+      <span class="sys-caret">${sysOpen?'▾':'▸'}</span>
+    </button>
+    ${sysOpen?`<div class="sys-rows">${rows.map(r=>
+      `<div class="sys-row">
+         <span class="sys-dot ${r.state}"></span>
+         <span class="sys-label">${esc(r.label)}</span>
+         <span class="sys-detail">${esc(r.detail)}</span>
+       </div>`).join('')}</div>`:''}
+  </div>`;
+}
+let sysOpen=false;
+function sysToggle(){ sysOpen=!sysOpen; render(); }
+
 function renderAgenda(c){
+  c.insertAdjacentHTML('beforeend', systemsHTML());
   const items=agendaOn(viewDate);
-  if(!items.length){ c.innerHTML='<div class="empty">Nothing on this day.<br>Tap + to add something.</div>'; return; }
+  // insertAdjacentHTML, not innerHTML: the systems block is already in here
+  // and assigning would wipe it.
+  if(!items.length){
+    c.insertAdjacentHTML('beforeend','<div class="empty">Nothing on this day.<br>Tap + to add something.</div>');
+    return;
+  }
   const mr=marks(state), ms=marks(suppState);
   const isToday=sameDay(viewDate,new Date());
   const nowT=isToday?hhmm(new Date()):null;
@@ -4650,8 +4803,76 @@ function exportEverything(){
   download(wrapCal(ev),'day-'+dk()+'.ics');
 }
 
+/* ---------- COLD-OPEN BRIEFING ----------
+   Jarvis reports before he is asked. Runs once per calendar day: the app is
+   already rendered behind it, so this is never load-blocking, and a tap
+   dismisses it immediately.
+
+   Its "seen" stamp lives in its own storage key rather than in the app
+   state, deliberately — it is per-device view state, not data the user
+   owns, and it has no business in the backup export. */
+const BOOT_KEY='zeus.briefing.lastSeen';
+const bootReduced=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function bootLines(){
+  const now=new Date();
+  const {total,done,pct}=arcCompletionPct();
+  const st=eatingState(now);
+  const nx=arcNextUp();
+  const dateLbl=now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
+  const out=[
+    `<div class="boot-line boot-mark" style="animation-delay:.05s">Z&#931;VS</div>`,
+    `<div class="boot-rule" style="animation-delay:.30s"></div>`,
+    `<div class="boot-line boot-meta" style="animation-delay:.45s">Online · ${esc(dateLbl)} · ${pad(now.getHours())}:${pad(now.getMinutes())}</div>`,
+    `<div class="boot-line boot-stat" style="animation-delay:.70s"><b>${pct}%</b>
+       <span>${done} of ${total} complete</span></div>`,
+    `<div class="boot-line boot-meta" style="animation-delay:.90s">${st.mode==='eating'
+         ? 'Eating window · '+esc(hm(st.left))+' remaining'
+         : 'Fasting · '+esc(hm(st.left))+' until the window opens'}</div>`
+  ];
+  out.push(nx
+    ? `<div class="boot-line boot-next" style="animation-delay:1.10s">Next · ${esc(nx.time)}
+         <span>${esc(nx.name)}</span></div>`
+    : `<div class="boot-line boot-next" style="animation-delay:1.10s">
+         <span>Nothing further scheduled today</span></div>`);
+  return out.join('');
+}
+
+let bootTimer=null;
+function bootShow(){
+  const el=document.getElementById('boot'); if(!el) return;
+  document.getElementById('bootInner').innerHTML=bootLines();
+  el.hidden=false;
+  document.body.style.overflow='hidden';
+  // Long enough to read the last line, which finishes arriving at ~1.5s.
+  bootTimer=setTimeout(bootDismiss, bootReduced()?2200:3400);
+}
+function bootDismiss(){
+  const el=document.getElementById('boot');
+  if(!el||el.hidden) return;
+  clearTimeout(bootTimer);
+  document.body.style.overflow='';
+  // The arc overlay locks body scroll too; do not fight it if it is open.
+  if(arcOverlayOpen) document.body.style.overflow='hidden';
+  if(bootReduced()){ el.hidden=true; return; }
+  el.classList.add('out');
+  setTimeout(()=>{ el.hidden=true; el.classList.remove('out'); },460);
+}
+function bootMaybeShow(){
+  let seen=null;
+  try{ seen=localStorage.getItem(BOOT_KEY); }catch(e){}
+  const today=key(new Date());
+  if(seen===today) return;
+  try{ localStorage.setItem(BOOT_KEY,today); }catch(e){}
+  bootShow();
+}
+// Replayable on demand from the header mark, so it is not a once-a-day-only
+// curiosity you cannot look at again.
+function bootReplay(){ bootShow(); }
+
 loadAll();
 render();
+bootMaybeShow();
 if(ANCHORED_TABS.includes(activeTab)) scrollToAnchor();
 document.getElementById('tabs').addEventListener('scroll',syncTabFade,{passive:true});
 window.addEventListener('resize',syncTabFade);
