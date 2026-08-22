@@ -568,14 +568,26 @@
   @keyframes arc-pop { from { opacity:0; transform:rotateX(calc(-1 * var(--tilt))) scale(.2) } }
   .arc-head-dot.done { background:currentColor; }
   .arc-head-dot:not(.done) { background:var(--bg); }
-  .arc-pin:hover .arc-head-dot, .arc-head-dot:focus-visible {
-    transform: rotateX(calc(-1 * var(--tilt))) scale(1.45); box-shadow:0 0 16px currentColor; outline:none; }
+  .arc-head-dot:focus { outline:none; }
+  /* :hover only, deliberately no :focus-visible — iOS Safari has a known
+     quirk where a tap can match :focus-visible (spec says it shouldn't,
+     real mice never trigger it on click, but touch does here), and with
+     no hover-equivalent "unhover" gesture the scaled-up dot and its tag
+     were getting stuck open after every tap. Desktop's real mouse hover is
+     unaffected; dot.blur() in the click handler is the belt-and-suspenders
+     version of this for browsers that do focus a tapped element. */
+  .arc-pin:hover .arc-head-dot {
+    transform: rotateX(calc(-1 * var(--tilt))) scale(1.45); box-shadow:0 0 16px currentColor; }
   .arc-tag { position:absolute; left:14px; white-space:nowrap; opacity:0;
     transform: rotateX(calc(-1 * var(--tilt))) rotateZ(calc(-1 * var(--spin,0deg)));
     transform-origin:0 50%; font-family:var(--mono); font-size:10.5px; letter-spacing:.06em;
     background:var(--surface); border:1px solid var(--line); padding:5px 9px; border-radius:7px;
     color:var(--ink); transition:opacity .16s ease; pointer-events:none; }
-  .arc-pin:hover .arc-tag, .arc-head-dot:focus-visible ~ .arc-tag { opacity:1; }
+  /* Flipped for pins on the right half of the ring (set in JS, from which
+     side of centre the pin actually falls on) — otherwise the tag always
+     grows rightward and runs off-screen for anything past ~3 o'clock. */
+  .arc-tag.flip { left:auto; right:14px; transform-origin:100% 50%; }
+  .arc-pin:hover .arc-tag { opacity:1; }
 
   .arc-hud { position:absolute; left:50%; top:42%; transform:translate(-50%,-50%);
     text-align:center; pointer-events:none; animation:arc-fade .8s ease 1.9s both; }
@@ -2047,13 +2059,35 @@ function arcBuildStatic(suffix){
   arcState[suffix].staticSig=EAT_START+'|'+EAT_END;
 }
 
+// Items close together in time land at nearly the same point on the ring —
+// their dots (and expanded tap zones) stack directly on top of each other,
+// so whichever renders last always wins the tap and the rest become
+// unreachable. Fans clustered items out across a few different radii
+// instead of leaving them all at ARC_R.
+function arcDeclutter(items){
+  const CLUSTER_DEG=9, STEP=17;
+  const sorted=[...items].sort((a,b)=>arcHours(a.time)-arcHours(b.time));
+  const clusters=[];
+  sorted.forEach(it=>{
+    const h=arcHours(it.time), last=clusters[clusters.length-1];
+    if(last && (h-last.h)*15<=CLUSTER_DEG){ last.items.push(it); last.h=h; }
+    else clusters.push({h,items:[it]});
+  });
+  const out=[];
+  clusters.forEach(cl=>{
+    const n=cl.items.length;
+    cl.items.forEach((it,i)=>out.push({...it, radius:ARC_R+(i-(n-1)/2)*STEP}));
+  });
+  return out;
+}
+
 function arcBuildPins(suffix,items){
   const pinsBox=arcNode('arcPins',suffix), stage=arcNode('arcStage',suffix);
   if(!pinsBox||!stage) return;
   pinsBox.innerHTML='';
   const s=stage.clientWidth/400||0.6, oy=(stage.clientHeight-400*s)/2;
-  items.forEach((it,i)=>{
-    const [x,y]=arcPoint(arcHours(it.time),ARC_R);
+  arcDeclutter(items).forEach((it,i)=>{
+    const [x,y]=arcPoint(arcHours(it.time),it.radius);
     const height=26+(it.done?10:0);
 
     const p=document.createElement('div');
@@ -2071,11 +2105,11 @@ function arcBuildPins(suffix,items){
     dot.style.animationDelay=(1.15+i*0.05)+'s';
     dot.setAttribute('role','button'); dot.setAttribute('tabindex','0');
     dot.setAttribute('aria-label',it.time+' '+it.name);
-    dot.onclick=it.tap;
+    dot.onclick=()=>{ dot.blur(); it.tap(); };
     dot.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); it.tap(); } };
 
     const tag=document.createElement('div');
-    tag.className='arc-tag'; tag.textContent=it.time+'  '+it.name;
+    tag.className='arc-tag'+(x>ARC_CX?' flip':''); tag.textContent=it.time+'  '+it.name;
     tag.style.bottom=(height-9)+'px';
 
     p.append(stem,dot,tag);
