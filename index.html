@@ -572,6 +572,18 @@
     animation: arc-draw 1.7s cubic-bezier(.22,.9,.28,1) .5s forwards; }
   @keyframes arc-draw { to { stroke-dashoffset:0; } }
 
+  /* NOTHING in the disc is tappable except the node heads — and in a
+     preserve-3d scene "behind in the DOM" does not mean behind in space.
+     Two things were eating taps: the .arc-band and .arc-plate LAYER DIVS
+     sit at translateZ(14px) and (2px), i.e. in front of the pin layer at
+     z=0, and each covers the whole stage; and the stems counter-rotate
+     toward the camera about their base, putting their far end in front of
+     the very dot they belong to. Disabling the layers' svg children was
+     not enough — the layer divs themselves are hit-testable boxes. So the
+     whole disc goes inert and only the dots opt back in. */
+  .arc-layer { pointer-events:none; }
+  .arc-head-dot { pointer-events:auto; }
+
   .arc-pin { position:absolute; left:0; top:0; width:0; height:0; transform-style:preserve-3d; }
   .arc-stem { position:absolute; left:-0.75px; bottom:0; width:1.5px;
     background:linear-gradient(to top, transparent, currentColor);
@@ -582,10 +594,14 @@
     left:-8.5px; border:2.5px solid currentColor; transform: rotateX(calc(-1 * var(--tilt)));
     transition: transform .18s ease, box-shadow .18s ease;
     animation: arc-pop .5s cubic-bezier(.34,1.6,.5,1) both; cursor:pointer; }
-  /* Invisible expanded hit area — the dot alone is well under a
-     comfortable touch target, and taps were missing it often. This pads
-     the tappable zone out without changing what's actually drawn. */
-  .arc-head-dot::before { content:''; position:absolute; inset:-13px; }
+  /* Invisible expanded hit area. Asymmetric on purpose: the dot faces the
+     camera but the whole disc is tilted, so its 17px height projects to
+     ~10px while the width stays ~17px. Padding vertically much harder than
+     horizontally is what makes the *rendered* target roughly square. */
+  /* Modest now — selection is handled by nearest-node logic on the stage,
+     so this only needs to make the hover state on desktop easy to trigger. */
+  .arc-head-dot::before { content:''; position:absolute; top:-12px; bottom:-12px;
+    left:-10px; right:-10px; }
   @keyframes arc-pop { from { opacity:0; transform:rotateX(calc(-1 * var(--tilt))) scale(.2) } }
   /* Mark II: a completed node reads as lit, not just filled. */
   .arc-head-dot.done { background:currentColor; box-shadow:0 0 10px currentColor; }
@@ -610,14 +626,17 @@
   .arc-tag { position:absolute; left:14px; opacity:0;
     transform: rotateX(calc(-1 * var(--tilt))) rotateZ(calc(-1 * var(--spin,0deg)));
     transform-origin:0 50%; font-family:var(--mono); font-size:11.5px; letter-spacing:.04em;
-    background:var(--surface); border:1px solid rgba(95,216,245,.4); padding:6px 10px;
+    border:1px solid rgba(95,216,245,.55); padding:6px 10px;
     border-radius:0; color:var(--ink); transition:opacity .16s ease; pointer-events:none;
     /* Wrap instead of nowrap, and cap the width: a long name on a node near
        the rim used to run straight off the stage and get clipped by the
        overlay's overflow-x. width:max-content keeps short labels tight. */
     white-space:normal; width:max-content; max-width:min(46vw, 200px);
     line-height:1.35; text-align:left;
-    box-shadow:0 4px 14px rgba(0,0,0,.5); }
+    /* Same lift as the detail card — sitting directly over the ring, the
+       bare --surface fill was the worst offender for looking see-through. */
+    background:linear-gradient(rgba(95,216,245,.07), rgba(95,216,245,.07)), var(--surface);
+    box-shadow:0 6px 18px rgba(0,0,0,.8); }
   /* Flipped for pins on the right half of the ring (set in JS from the pin's
      actual x), so the label always grows INWARD, toward the middle of the
      stage, rather than off whichever edge it happens to sit near. */
@@ -662,8 +681,16 @@
      Sized for reading, not for squeezing into the middle of a tilted ring:
      real body type, 44px-plus hit targets, full-width actions. */
   .arc-detail { width:100%; max-width:min(96vw, 560px); }
-  .arc-d-card { background:var(--surface); border:1px solid rgba(95,216,245,.34);
+  /* --surface sits only a shade above the overlay's ground, so on the busy
+     grid backdrop the card read as translucent. Lifting it with a flat cyan
+     wash over the token, a brighter edge and a real drop shadow makes it
+     sit clearly ON TOP without inventing a new colour. drop-shadow, not
+     box-shadow: clip-path would crop a box-shadow away entirely. */
+  .arc-d-card {
+    background:linear-gradient(rgba(95,216,245,.07), rgba(95,216,245,.07)), var(--surface);
+    border:1px solid rgba(95,216,245,.55);
     padding:15px 16px 16px; position:relative;
+    filter:drop-shadow(0 10px 26px rgba(0,0,0,.8));
     clip-path:polygon(var(--notch) 0, 100% 0, 100% calc(100% - var(--notch)),
                       calc(100% - var(--notch)) 100%, 0 100%, 0 var(--notch)); }
   /* padding-right reserves the close button's corner — without it the
@@ -742,7 +769,17 @@
     background-size:44px 44px, 44px 44px, 100% 3px, 100% 100%;
   }
   .arc-overlay > * { position:relative; z-index:1; }
-  .arc-ov-body { display:flex; flex-direction:column; align-items:center; gap:14px; width:100%; }
+  .arc-ov-body { display:flex; flex-direction:column; align-items:center; gap:14px; width:100%;
+    /* Reserves the band the detail card is pinned into, below. */
+    padding-bottom:196px; }
+  /* On a phone the card is pinned to the bottom rather than sitting in the
+     column flow. In flow it changed the body's height when it swapped
+     between the hint and a full card, which re-centred the flex column and
+     moved the whole disc vertically — the arc jumped out from under your
+     finger every time you selected something, which is half the reason
+     nodes felt impossible to hit. Pinned, the disc never moves. */
+  .arc-detail { position:absolute; left:12px; right:12px;
+    bottom:calc(18px + env(safe-area-inset-bottom)); width:auto; max-width:none; }
   #arcOvStageHost { width:100%; display:flex; justify-content:center; }
   /* The stage must stay SQUARE: the SVG's viewBox is 400x400 with the
      default xMidYMid-meet, so a non-square box would scale the disc down to
@@ -952,11 +989,15 @@
        phone), and the detail card moves alongside instead of underneath,
        so neither has to shrink to share the screen. */
     .arc-ov-body { flex-direction:row; align-items:center; justify-content:center;
-      gap:36px; max-width:1180px; margin:0 auto; }
+      gap:36px; max-width:1180px; margin:0 auto; padding-bottom:0; }
     #arcOvStageHost { width:auto; flex:0 1 auto; }
     .arc-overlay .arc-stage { width:min(52vw, 74vh); max-width:none; }
     .arc-overlay { --tilt:30deg; }
-    .arc-detail { width:320px; max-width:320px; flex-shrink:0; }
+    /* Back into the row here: side by side with align-items:center the row's
+       height is the stage's, so the card growing or shrinking cannot move
+       the disc — the phone's pinning is unnecessary and would misplace it. */
+    .arc-detail { position:static; left:auto; right:auto; bottom:auto;
+      width:320px; max-width:320px; flex-shrink:0; }
     .arc-tasklist { max-width:1180px; }
 
     /* The floating + becomes a labelled button docked to the left rail —
@@ -2348,7 +2389,7 @@ function arcBuildStatic(suffix){
 // unreachable. Fans clustered items out across a few different radii
 // instead of leaving them all at ARC_R.
 function arcDeclutter(items){
-  const CLUSTER_DEG=9, STEP=17;
+  const CLUSTER_DEG=9, STEP=26;
   const sorted=[...items].sort((a,b)=>arcHours(a.time)-arcHours(b.time));
   const clusters=[];
   sorted.forEach(it=>{
@@ -2388,11 +2429,10 @@ function arcBuildPins(suffix,items){
     dot.style.animationDelay=(1.15+i*0.05)+'s';
     dot.setAttribute('role','button'); dot.setAttribute('tabindex','0');
     dot.setAttribute('aria-label',it.time+' '+it.name);
-    // Tapping a node now selects it and shows the centre readout, rather
-    // than jumping straight into the edit sheet. On touch there is no hover,
-    // so the old tag never appeared and the detail was effectively invisible;
-    // the sheet is still one tap away, from the readout's Edit button.
-    dot.onclick=()=>{ dot.blur(); arcSelect(it.key); };
+    // No click handler on the dot itself — arcAttachTap() below owns pointer
+    // selection for the whole stage and picks the NEAREST node, which beats
+    // per-element hit boxes here (see the note there). Keyboard still
+    // activates the focused dot directly.
     dot.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); arcSelect(it.key); } };
 
     const tag=document.createElement('div');
@@ -2403,6 +2443,35 @@ function arcBuildPins(suffix,items){
     pinsBox.appendChild(p);
   });
   arcState[suffix].pinSig=items.map(it=>it.key+it.time).join(',');
+  arcAttachTap(suffix);
+}
+
+/* Nearest-node selection for the whole stage.
+   Per-element hit boxes cannot win here: the node heads render about 17x10
+   after the disc's tilt, and padding them out far enough to be thumb-sized
+   makes each one cover its neighbours — measured, a generous pad dropped
+   dead-centre accuracy from 13/13 to 5/13, because whichever pad is painted
+   last wins the point. Picking the nearest centre instead gives an
+   arbitrarily large catch radius with correct nearest-wins behaviour and no
+   overlap to arbitrate. Bound once per stage; the listener survives pin
+   rebuilds because it reads the pin list at click time. */
+const ARC_TAP_RADIUS=52;
+function arcAttachTap(suffix){
+  const stage=arcNode('arcStage',suffix);
+  if(!stage||stage.dataset.tapBound) return;
+  stage.dataset.tapBound='1';
+  stage.addEventListener('click',e=>{
+    const pinsBox=arcNode('arcPins',suffix); if(!pinsBox) return;
+    let bestKey=null, bestD=Infinity;
+    [...pinsBox.children].forEach(p=>{
+      const dot=p.querySelector('.arc-head-dot'); if(!dot) return;
+      const b=dot.getBoundingClientRect();
+      const d=Math.hypot(e.clientX-(b.left+b.width/2), e.clientY-(b.top+b.height/2));
+      if(d<bestD){ bestD=d; bestKey=p.dataset.key; }
+    });
+    if(bestKey && bestD<=ARC_TAP_RADIUS) arcSelect(bestKey);
+    else arcClearSelection();   // tapping empty dial dismisses the readout
+  });
 }
 
 // Same formula as the status block's own #pct (renderProgress()'s default
