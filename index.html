@@ -17,18 +17,36 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <meta name="apple-mobile-web-app-title" content="ZEUS">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#14201d">
+<meta name="theme-color" content="#060b10">
 <meta name="supported-color-schemes" content="dark">
 <title>ZEUS Protocol</title>
 <style>
+  /* ---------- MARK II PALETTE ----------
+     The Jarvis restyle is mostly colour temperature: the old palette was
+     warm (cream ink on green-black, like paper in a dim room), this one is
+     cold (blue-white on blue-black, like light with nothing behind it).
+     Token names and their jobs are unchanged, so every existing rule keeps
+     working — only the values they resolve to moved. Semantics are intact:
+     moss still means done, rose still means fasting/overdue.
+     --line is the one token that changed *kind* as well as value: it used
+     to be neutral grey, it is now faintly cyan, which is what makes plain
+     dividers read as HUD rather than as borders. */
   :root {
     color-scheme: dark;
-    --bg:#14201d; --surface:#1b2a26; --ink:#ece7d6;
-    --muted:rgba(236,231,214,0.58); --faint:rgba(236,231,214,0.30);
-    --line:rgba(236,231,214,0.14);
-    --frost:#6fc4d8; --frost-soft:rgba(111,196,216,0.16);
-    --moss:#8fce8a; --clay:#e89b6c; --clay-soft:rgba(232,155,108,0.16);
-    --amber:#d4bd6e; --rose:#e88a8a; --rose-soft:rgba(232,138,138,0.14);
+    --bg:#060b10; --surface:#0d1822; --ink:#d6e9f2;
+    --muted:rgba(214,233,242,0.62); --faint:rgba(214,233,242,0.34);
+    --line:rgba(95,216,245,0.20);
+    --frost:#5fd8f5; --frost-soft:rgba(95,216,245,0.16);
+    --moss:#4fe6b0; --clay:#ff9a5c; --clay-soft:rgba(255,154,92,0.16);
+    --amber:#ffc247; --rose:#ff5f6d; --rose-soft:rgba(255,95,109,0.14);
+    /* Edge/accent glow. Never applied to body text — glowing prose is the
+       fastest way to make an interface unreadable — and deliberately kept
+       off list rows, where a blurred shadow per row costs real paint time
+       while scrolling. */
+    --glow:0 0 14px rgba(95,216,245,0.34);
+    --glow-soft:0 0 10px rgba(95,216,245,0.22);
+    /* Corner notch depth for the clip-path HUD bevel. */
+    --notch:9px;
     /* Third type role. Georgia carries headings, the system sans carries
        prose, and this carries anything the eye scans down a column. System
        stack only — no web font, the file stays self-contained. */
@@ -57,9 +75,9 @@
     text-transform:uppercase; }
   .wdays div, .wgrid-head div { font-family:var(--mono); }
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html { background-color:#14201d; min-height:100%; }
-  html,body { background-color:#14201d; background-color:var(--bg);
-    color:#ece7d6; color:var(--ink); }
+  html { background-color:#060b10; min-height:100%; }
+  html,body { background-color:#060b10; background-color:var(--bg);
+    color:#d6e9f2; color:var(--ink); }
   body { min-height:100vh; min-height:100dvh; overscroll-behavior-y:none;
     -webkit-text-size-adjust:100%;
     /* Kills the double-tap-to-zoom gesture while leaving scrolling alone. The
@@ -105,7 +123,7 @@
   .eat-row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
   .pct { font-size:24px; font-weight:600; color:var(--moss); line-height:1; }
   .pct-sub { font-size:12.5px; color:var(--muted); }
-  .progress-track { height:6px; background:rgba(236,231,214,.10); border-radius:4px; overflow:hidden;
+  .progress-track { height:6px; background:rgba(214,233,242,.10); border-radius:4px; overflow:hidden;
     margin-bottom:3px; }
   .progress-bar { height:100%; width:0%; background:var(--moss); border-radius:4px; transition:width .4s ease; }
 
@@ -140,7 +158,7 @@
 
   .row { display:flex; align-items:center; gap:11px; padding:13px 6px; border-bottom:1px solid var(--line); }
   .check { flex-shrink:0; width:26px; height:26px; border-radius:50%;
-    border:2px solid rgba(236,231,214,.35); display:grid; place-items:center; transition:all .2s; }
+    border:2px solid rgba(214,233,242,.35); display:grid; place-items:center; transition:all .2s; }
   .check.on { background:var(--moss); border-color:var(--moss); }
   .check.on::after { content:"✓"; color:var(--bg); font-size:15px; font-weight:800; }
   .rbody { flex:1; min-width:0; }
@@ -166,16 +184,16 @@
   .block-title { font-family:Georgia,serif; font-size:17.5px; font-weight:600; }
   .block-time { font-size:12px; color:var(--frost); font-weight:600; background:var(--frost-soft);
     border:none; padding:5px 10px; border-radius:7px; }
-  .wait-note { margin:12px 6px 0; padding:10px 14px; background:rgba(212,189,110,.12);
+  .wait-note { margin:12px 6px 0; padding:10px 14px; background:rgba(255,194,71,.12);
     border-radius:10px; font-size:13px; color:var(--amber); font-weight:500; }
 
   .note { margin:18px 6px 0; padding:14px 16px; border-radius:12px; background:var(--frost-soft);
     font-size:12.5px; line-height:1.55; color:var(--frost); }
   .note strong { color:var(--ink); }
-  .note.warn { background:rgba(212,189,110,.12); color:var(--amber); }
+  .note.warn { background:rgba(255,194,71,.12); color:var(--amber); }
 
-  .import-zone { margin:12px 6px 0; padding:22px 18px; border:1.5px dashed rgba(111,196,216,.45);
-    border-radius:14px; text-align:center; background:rgba(111,196,216,.06); }
+  .import-zone { margin:12px 6px 0; padding:22px 18px; border:1.5px dashed rgba(95,216,245,.45);
+    border-radius:14px; text-align:center; background:rgba(95,216,245,.06); }
   .import-zone h3 { font-family:Georgia,serif; font-size:17px; margin-bottom:5px; }
   .import-zone p { font-size:12.5px; color:var(--muted); line-height:1.5; margin-bottom:14px; }
   .import-btn { background:var(--frost); color:var(--bg); border:none; padding:12px 22px;
@@ -288,8 +306,8 @@
   .now-line .ln { flex:1; height:1.5px; background:var(--rose); opacity:.7; }
   .ag-sub { font-size:12px; color:var(--faint); margin-top:2px; }
   .compact-import { display:flex; gap:9px; align-items:center; margin:10px 6px 16px;
-    padding:12px 14px; border:1px dashed rgba(111,196,216,.4); border-radius:12px;
-    background:rgba(111,196,216,.05); }
+    padding:12px 14px; border:1px dashed rgba(95,216,245,.4); border-radius:12px;
+    background:rgba(95,216,245,.05); }
   .compact-import .ci-txt { flex:1; font-size:12.5px; color:var(--muted); line-height:1.4; }
   .compact-import button { background:var(--frost); color:var(--bg); border:none; padding:10px 15px;
     border-radius:9px; font-size:13px; font-weight:700; flex-shrink:0; }
@@ -297,13 +315,13 @@
 
   .gcard { margin:10px 6px 16px; padding:16px; border-radius:14px; background:var(--surface);
     border:1px solid var(--line); }
-  .gcard.on { border-color:rgba(143,206,138,.45); background:rgba(143,206,138,.07); }
+  .gcard.on { border-color:rgba(79,230,176,.45); background:rgba(79,230,176,.07); }
   .gcard.cal-collapsed { margin-bottom:12px; cursor:pointer; }
   .gcard.cal-collapsed .gtop { margin-bottom:0; }
   .cal-collapsed-meta { font-size:12.5px; color:var(--muted); font-weight:600; }
   .gtop { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
   .gdot { width:9px; height:9px; border-radius:50%; background:var(--faint); flex-shrink:0; }
-  .gdot.live { background:var(--moss); box-shadow:0 0 0 4px rgba(143,206,138,.18); }
+  .gdot.live { background:var(--moss); box-shadow:0 0 0 4px rgba(79,230,176,.18); }
   .gdot.err { background:var(--rose); }
   .gtitle { font-family:Georgia,serif; font-size:16px; font-weight:600; flex:1; }
   .gsub { font-size:12.5px; color:var(--muted); line-height:1.5; margin-bottom:12px; }
@@ -338,12 +356,12 @@
 
 
   .row.opt-off { opacity:.40; }
-  .row.opt-off .check { border-style:dashed; border-color:rgba(236,231,214,.45); }
+  .row.opt-off .check { border-style:dashed; border-color:rgba(214,233,242,.45); }
   .check.plus::after { content:"+"; color:var(--muted); font-size:18px; font-weight:600; line-height:1; }
   .opt-pill { font-weight:700;
-    color:var(--amber); background:rgba(212,189,110,.15); border:none;
+    color:var(--amber); background:rgba(255,194,71,.15); border:none;
     padding:3px 8px; border-radius:6px; }
-  .opt-pill.off { color:var(--muted); background:rgba(236,231,214,.08); }
+  .opt-pill.off { color:var(--muted); background:rgba(214,233,242,.08); }
   .backup-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
 
 
@@ -359,10 +377,10 @@
   .biostatus { font-size:12.5px; color:var(--muted); line-height:1.5; margin-top:9px; }
   .biostatus b { color:var(--ink); }
   .beta-pill { font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
-    color:var(--amber); background:rgba(212,189,110,.15); padding:3px 7px; border-radius:5px; }
+    color:var(--amber); background:rgba(255,194,71,.15); padding:3px 7px; border-radius:5px; }
 
-  .upload-zone { margin:16px 6px 10px; padding:20px 18px; border:1.5px dashed rgba(111,196,216,.45);
-    border-radius:14px; text-align:center; background:rgba(111,196,216,.06); }
+  .upload-zone { margin:16px 6px 10px; padding:20px 18px; border:1.5px dashed rgba(95,216,245,.45);
+    border-radius:14px; text-align:center; background:rgba(95,216,245,.06); }
   .upload-zone h3 { font-family:Georgia,serif; font-size:17px; margin-bottom:5px; }
   .upload-zone p { font-size:12.5px; color:var(--muted); line-height:1.5; margin-bottom:14px; }
 
@@ -385,13 +403,13 @@
 
   .streak-pill { font-size:10.5px; font-weight:800; letter-spacing:.04em;
     color:var(--clay); background:var(--clay-soft); padding:3px 8px; border-radius:6px; }
-  .streak-pill.zero { color:var(--faint); background:rgba(236,231,214,.07); font-weight:600; }
+  .streak-pill.zero { color:var(--faint); background:rgba(214,233,242,.07); font-weight:600; }
 
 
   .eat-label { font-weight:700; }
   .eat-left { font-size:12.5px; font-weight:700; white-space:nowrap; }
   .eat-sub { color:var(--faint); font-weight:600; display:block; margin-top:2px; }
-  .eat-track { height:6px; background:rgba(236,231,214,.10); border-radius:4px; overflow:hidden; }
+  .eat-track { height:6px; background:rgba(214,233,242,.10); border-radius:4px; overflow:hidden; }
   .eat-fill { height:100%; width:0%; border-radius:4px; transition:width .5s ease; }
   .eat-eating .eat-label, .eat-eating .eat-left { color:var(--moss); }
   .eat-eating .eat-fill { background:var(--moss); }
@@ -566,7 +584,8 @@
      the tappable zone out without changing what's actually drawn. */
   .arc-head-dot::before { content:''; position:absolute; inset:-13px; }
   @keyframes arc-pop { from { opacity:0; transform:rotateX(calc(-1 * var(--tilt))) scale(.2) } }
-  .arc-head-dot.done { background:currentColor; }
+  /* Mark II: a completed node reads as lit, not just filled. */
+  .arc-head-dot.done { background:currentColor; box-shadow:0 0 10px currentColor; }
   .arc-head-dot:not(.done) { background:var(--bg); }
   .arc-head-dot:focus { outline:none; }
   /* :hover only, deliberately no :focus-visible — iOS Safari has a known
@@ -596,7 +615,7 @@
     text-transform:uppercase; color:var(--muted); }
   .arc-pct { font-family:var(--mono); font-size:44px; font-weight:600; color:var(--moss);
     font-variant-numeric:tabular-nums; line-height:1; margin:6px 0 7px;
-    text-shadow:0 0 26px rgba(143,206,138,.35); }
+    text-shadow:0 0 26px rgba(79,230,176,.35); }
   .arc-state { font-family:var(--mono); font-size:11.5px; letter-spacing:.1em; }
   .arc-clock { font-family:var(--mono); font-size:11px; color:var(--muted);
     margin-top:5px; font-variant-numeric:tabular-nums; }
@@ -618,6 +637,20 @@
      #arcOvStageHost gives it a real width — .arc-stage still ends up
      visually centered via its own max-width + margin:auto. */
   .arc-overlay.open { display:flex; flex-direction:column; justify-content:center; }
+  /* Mark II atmosphere: a faint cyan grid and scanlines behind the disc, so
+     the overlay reads as a projection surface rather than a blank screen.
+     Both are pure background-image — no extra elements, nothing to hit-test,
+     and the disc/pins sit above it untouched. */
+  .arc-overlay::before {
+    content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      linear-gradient(rgba(95,216,245,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(95,216,245,.05) 1px, transparent 1px),
+      repeating-linear-gradient(rgba(95,216,245,.035) 0 1px, transparent 1px 3px),
+      radial-gradient(120% 70% at 50% 42%, rgba(95,216,245,.10), transparent 65%);
+    background-size:44px 44px, 44px 44px, 100% 3px, 100% 100%;
+  }
+  .arc-overlay > * { position:relative; z-index:1; }
   #arcOvStageHost { width:100%; }
   /* Width alone was the limit here — a phone is much taller than it is
      wide, and the screenshots showed a lot of unused vertical room above
@@ -658,6 +691,82 @@
 
   .link-btn { width:100%; margin-top:6px; padding:12px; border-radius:10px; background:var(--frost-soft);
     color:var(--frost); border:none; font-size:14px; font-weight:600; }
+
+  /* ============ MARK II — geometry & labels (phase 2) ============
+     Deliberately one block of overrides rather than edits threaded through
+     every rule above: it keeps the restyle reviewable in one place and
+     revertible by deleting a single section. It sits BEFORE the desktop
+     query on purpose — the (min-width:900px) rules must still win over
+     these, or the vertical tab rail would lose its left-bar treatment. */
+
+  /* Corners get cut, not rounded. clip-path also clips the border, which
+     is what produces the bevelled edge — and it clips box-shadow away
+     entirely, so anything here that needs to glow uses filter:drop-shadow
+     instead, which follows the clip. */
+  .fab, .btn-primary, .btn-ghost, .btn-danger, .import-btn, .gbtn, .link-btn,
+  .connect-btn, .earlier-btn, .day-back, .chip, .logo, .seg button, .opt-pill {
+    border-radius:0;
+    clip-path:polygon(var(--notch) 0, 100% 0, 100% calc(100% - var(--notch)),
+                      calc(100% - var(--notch)) 100%, 0 100%, 0 var(--notch));
+  }
+  /* The round + becomes a bevelled square; drop-shadow survives the clip
+     where box-shadow would not. */
+  .fab { border-radius:0; box-shadow:none; filter:drop-shadow(0 3px 10px rgba(0,0,0,.5))
+    drop-shadow(0 0 12px rgba(95,216,245,.4)); }
+  .chip, .opt-pill { --notch:6px; }
+
+  /* Panels get bracket marks at opposite corners. Cheap, and it reads as
+     HUD instantly without touching the panel's own box. */
+  .gcard, .biocard, .import-zone, .upload-zone, .note { position:relative; }
+  .gcard::before, .biocard::before, .import-zone::before, .upload-zone::before, .note::before,
+  .gcard::after,  .biocard::after,  .import-zone::after,  .upload-zone::after,  .note::after {
+    content:''; position:absolute; width:12px; height:12px;
+    border:2px solid var(--frost); pointer-events:none; opacity:.55;
+  }
+  .gcard::before, .biocard::before, .import-zone::before, .upload-zone::before, .note::before {
+    top:-1px; left:-1px; border-right:0; border-bottom:0;
+  }
+  .gcard::after, .biocard::after, .import-zone::after, .upload-zone::after, .note::after {
+    bottom:-1px; right:-1px; border-left:0; border-top:0;
+  }
+
+  /* Chrome type goes mono. Georgia is what still read "calm journal"
+     rather than "flight computer"; this is the most opinionated change in
+     the restyle and the cleanest single thing to revert if it lands wrong. */
+  .logo, h1, .block-title, .mhead, .day-title, .wk-label, .gtitle,
+  .import-zone h3, .upload-zone h3, .sheet h2, .md-name, .md-val, .td-title {
+    font-family:var(--mono); letter-spacing:-0.01em;
+  }
+  .logo { color:var(--frost); text-shadow:var(--glow-soft); border-color:rgba(95,216,245,.38); }
+  .eyebrow { font-family:var(--mono); }
+
+  /* Tabs: uppercase mono, lit when active. */
+  .tab { font-family:var(--mono); font-size:11px; letter-spacing:.10em;
+    text-transform:uppercase; padding:13px 12px; }
+  .tab.active { text-shadow:var(--glow-soft); background:rgba(95,216,245,.07); }
+
+  /* Tags were already mono uppercase — the thin box is what makes them
+     read as HUD chips rather than coloured words. */
+  .tag { border:1px solid currentColor; padding:2px 6px; font-size:9.5px; letter-spacing:.12em; }
+  .tag-dot { margin-right:4px; }
+
+  /* Checkboxes become targeting diamonds. The glyph counter-rotates so the
+     tick and the + stay upright inside the rotated box. */
+  .check { border-radius:2px; transform:rotate(45deg); }
+  .check.on { box-shadow:var(--glow); }
+  .check.on::after, .check.plus::after { display:block; transform:rotate(-45deg); }
+
+  /* Edge glow on the lit elements only — never on rows (a blurred shadow
+     per row is the usual cause of scroll jank) and never on body text. */
+  .progress-bar, .eat-fill { box-shadow:var(--glow-soft); }
+  .pct { text-shadow:0 0 18px rgba(79,230,176,.45); }
+  .now-line-day, .now-line .ln { box-shadow:0 0 8px rgba(255,95,109,.6); }
+
+  /* Bars and inputs square off to match the bevelled buttons. */
+  .progress-track, .eat-track, .field input, .field select, .gid-input,
+  .compare-sel, .sheet, .desc-panel, .md-point, .wait-note, .note,
+  .import-zone, .upload-zone, .gcard, .biocard, .dose, .block-time,
+  .streak-pill, .beta-pill, .undo-toast { border-radius:0; }
 
   /* ============ Desktop (>=900px): three-column shell ============
      Everything below is scoped to this query. Nothing above changes, so
@@ -1013,12 +1122,12 @@ let SUBS=[], SUB_PROXY='', SUB_MINUTES=15, subTimer=null;
 let colorPickerFor=null;
 let calSubOpen=false;   // manual override; the card is always shown when SUBS is empty
 let calDataOpen=false;  // backup/export/import section, collapsed by default
-const CAL_COLORS=['#6fc4d8','#88a4dd','#9688dd','#c188dd','#dd88cf','#dd88a4',
+const CAL_COLORS=['#5fd8f5','#88a4dd','#9688dd','#c188dd','#dd88cf','#dd88a4',
                   '#dd9688','#ddc188','#cfdd88','#a4dd88','#88dd96','#88ddc1'];
-const TASK_COLOR='#d4bd6e';   // mirrors --amber, for inline styles hexA() has to compute on
+const TASK_COLOR='#ffc247';   // mirrors --amber, for inline styles hexA() has to compute on
 function eventColor(e){
-  if(e.src==='sub'){ const s=SUBS.find(x=>x.id===e.subId); return s?s.color:'#6fc4d8'; }
-  return '#6fc4d8';
+  if(e.src==='sub'){ const s=SUBS.find(x=>x.id===e.subId); return s?s.color:'#5fd8f5'; }
+  return '#5fd8f5';
 }
 
 function proxied(url){
@@ -2027,8 +2136,8 @@ function arcBuildStatic(suffix){
   plate.innerHTML='';
   const gradId='arcPlateGlow-'+suffix;
   const grad=svgEl('radialGradient',{id:gradId});
-  grad.appendChild(svgEl('stop',{offset:'0%','stop-color':'#1b2a26','stop-opacity':'.85'}));
-  grad.appendChild(svgEl('stop',{offset:'100%','stop-color':'#1b2a26','stop-opacity':'0'}));
+  grad.appendChild(svgEl('stop',{offset:'0%','stop-color':'#0d1822','stop-opacity':'.85'}));
+  grad.appendChild(svgEl('stop',{offset:'100%','stop-color':'#0d1822','stop-opacity':'0'}));
   const defs=svgEl('defs'); defs.appendChild(grad); plate.appendChild(defs);
   plate.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:`url(#${gradId})`}));
   plate.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:'none',stroke:'var(--line)','stroke-width':1.5}));
@@ -2056,8 +2165,19 @@ function arcBuildStatic(suffix){
 
   const band=arcNode('arcBand',suffix); if(band){
     band.innerHTML='';
+    // Mark II: the eating band is the brightest thing on the ring, so it
+    // carries the bloom. An SVG blur-and-merge filter rather than a CSS
+    // box-shadow, which does nothing useful on a stroked path.
+    const fId='arcBandGlow-'+suffix;
+    const bDefs=svgEl('defs');
+    const f=svgEl('filter',{id:fId,x:'-50%',y:'-50%',width:'200%',height:'200%'});
+    f.appendChild(svgEl('feGaussianBlur',{stdDeviation:3.5,result:'b'}));
+    const merge=svgEl('feMerge');
+    merge.appendChild(svgEl('feMergeNode',{in:'b'}));
+    merge.appendChild(svgEl('feMergeNode',{in:'SourceGraphic'}));
+    f.appendChild(merge); bDefs.appendChild(f); band.appendChild(bDefs);
     const eat=svgEl('path',{d:arcArcPath(EAT_START,EAT_END,ARC_R),fill:'none',
-      stroke:'var(--moss)','stroke-width':8,'stroke-linecap':'round'});
+      stroke:'var(--moss)','stroke-width':8,'stroke-linecap':'round',filter:`url(#${fId})`});
     eat.classList.add('arc-draw'); eat.style.setProperty('--arc-len',2*Math.PI*ARC_R);
     band.appendChild(eat);
   }

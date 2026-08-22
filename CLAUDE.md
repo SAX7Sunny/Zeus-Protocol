@@ -85,9 +85,27 @@ never write one into a comment or a test fixture.
 
 ## Style
 
-Tone of the UI is calm and sparse: Georgia for headings, system sans for body,
-generous spacing, colour used as signal rather than decoration. Match what is
-already there rather than introducing a new pattern.
+Tone of the UI is **Mark II** — a Jarvis/Iron Man HUD: cold blue-white on
+blue-black, cyan-tinted hairlines, bevelled (clip-path notched) corners rather
+than rounded ones, mono uppercase for chrome and labels, system sans for body
+prose. Colour carries atmosphere here, not only signal. Match what is already
+there rather than introducing a new pattern.
+
+This replaced an earlier "calm and sparse" direction (warm cream on green-black,
+Georgia headings) in August 2026 — deliberately, at the user's request. Don't
+"restore" the warm palette or the serif headings thinking they were lost.
+
+Two rules the restyle depends on:
+
+- **Glow is for edges and accents only.** Never on body text, and never on
+  list rows — a blurred shadow per row is the usual cause of scroll jank.
+- **`clip-path` clips `box-shadow` away entirely.** Anything bevelled that
+  also needs to glow uses `filter: drop-shadow(...)`, which follows the clip.
+  `.fab` is the worked example.
+
+Still no web fonts: the one-file rule above means the sci-fi font shelf
+(Orbitron, Rajdhani, …) is unavailable. The futurism is carried by colour,
+geometry and the existing `--mono` system stack.
 
 Text in the interface is English. Code comments explain *why*, not *what* —
 the non-obvious constraint, the browser quirk, the reason a regex looks odd.
