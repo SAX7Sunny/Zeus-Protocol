@@ -33,9 +33,12 @@
        prose, and this carries anything the eye scans down a column. System
        stack only — no web font, the file stays self-contained. */
     --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
-    /* Day-arc tilt state, not a colour — read by .arc-stem/.arc-head-dot to
-       counter-rotate so they stay upright while the disc itself tilts. */
-    --tilt: 60deg;
+    /* Day-arc tilt, not a colour — read by .arc-stem/.arc-head-dot to
+       counter-rotate so they stay upright while the disc itself tilts.
+       Backed off from 60deg to read more clearly now the view is fixed
+       (no more drag to nudge it flatter yourself): the far side of the
+       ring and its hour labels were compressing hard at the steeper angle. */
+    --tilt: 44deg;
   }
 
   /* Data face: every value that has to line up vertically. tabular-nums is
