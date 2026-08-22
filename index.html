@@ -2158,12 +2158,17 @@ function arcBlockKey(e){
 function arcOpenMobile(){
   arcMobileOpen=true;
   document.getElementById('arcOverlay').classList.add('open');
+  // The overlay is full-screen, unlike the bottom sheet the rest of the app
+  // uses — nothing else locks body scroll, so without this a swipe on the
+  // arc scrolls the page underneath instead of just sitting still.
+  document.body.style.overflow='hidden';
   arcBuildFull('ov');
 }
 function arcCloseMobile(){
   if(!arcMobileOpen) return;
   arcMobileOpen=false;
   document.getElementById('arcOverlay').classList.remove('open');
+  document.body.style.overflow='';
 }
 function arcOverlayTap(e){
   if(e.target.id==='arcOverlay') arcCloseMobile();   // tap outside the stage/close button
