@@ -33,6 +33,9 @@
        prose, and this carries anything the eye scans down a column. System
        stack only — no web font, the file stays self-contained. */
     --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+    /* Day-arc tilt state, not a colour — read by .arc-stem/.arc-head-dot to
+       counter-rotate so they stay upright while the disc itself tilts. */
+    --tilt: 60deg;
   }
 
   /* Data face: every value that has to line up vertically. tabular-nums is
@@ -511,7 +514,91 @@
   /* Every transition this pass touched, honoured. */
   @media (prefers-reduced-motion: reduce){
     .progress-bar, .eat-fill, .drag-shift, .tabs-wrap::after { transition:none; }
+    /* Ported from day-arc-3d.html verbatim: every entrance animation off,
+       final state shown immediately. Unconditional — the arc appears both
+       in the mobile overlay and the desktop rail, not just past 900px. */
+    .arc-disc, .arc-draw, .arc-stem, .arc-head-dot, .arc-hud { animation:none !important; opacity:1 !important; }
+    .arc-draw { stroke-dashoffset:0 !important; }
   }
+
+  /* ================= Day Arc (ported from day-arc-3d.html) =================
+     Same stage/disc/layer/pin structure and animation names as the
+     reference; classes prefixed arc- so nothing here can collide with the
+     app's own rules. Two independent instances share this CSS: the mobile
+     overlay (#arcOverlay, opens on tap) and the desktop right-rail copy
+     (#arcRailWrap, always on screen) — each has its own DOM ids suffixed
+     -ov / -rail, built and driven by arcBuildFull()/arcRefresh() in the
+     script. Every colour is one of the app's existing CSS variables. */
+  .arc-stage { position:relative; perspective:1150px; perspective-origin:50% 42%; touch-action:none; }
+  .arc-disc { position:absolute; inset:0; transform-style:preserve-3d;
+    transform: rotateX(var(--tilt)) rotateZ(var(--spin,0deg));
+    animation: arc-settle 1.6s cubic-bezier(.2,.85,.25,1) both; }
+  @keyframes arc-settle {
+    from { transform: rotateX(88deg) rotateZ(-26deg) scale(.82); opacity:0; }
+    to   { transform: rotateX(var(--tilt)) rotateZ(var(--spin,0deg)) scale(1); opacity:1; }
+  }
+  .arc-layer { position:absolute; inset:0; transform-style:preserve-3d; }
+  .arc-layer svg { width:100%; height:100%; overflow:visible; display:block; }
+  .arc-depth-1 { transform: translateZ(-16px); opacity:.30; }
+  .arc-depth-2 { transform: translateZ(-32px); opacity:.16; }
+  .arc-depth-3 { transform: translateZ(-48px); opacity:.07; }
+  .arc-plate   { transform: translateZ(2px); }
+  .arc-band    { transform: translateZ(14px); }
+  .arc-draw { stroke-dasharray:var(--arc-len); stroke-dashoffset:var(--arc-len);
+    animation: arc-draw 1.7s cubic-bezier(.22,.9,.28,1) .5s forwards; }
+  @keyframes arc-draw { to { stroke-dashoffset:0; } }
+
+  .arc-pin { position:absolute; left:0; top:0; width:0; height:0; transform-style:preserve-3d; }
+  .arc-stem { position:absolute; left:-0.75px; bottom:0; width:1.5px;
+    background:linear-gradient(to top, transparent, currentColor);
+    opacity:.55; transform-origin:50% 100%; transform: rotateX(calc(-1 * var(--tilt)));
+    animation: arc-rise .55s cubic-bezier(.34,1.5,.5,1) both; }
+  @keyframes arc-rise { from { height:0; opacity:0 } }
+  .arc-head-dot { position:absolute; width:13px; height:13px; border-radius:50%;
+    left:-6.5px; border:2px solid currentColor; transform: rotateX(calc(-1 * var(--tilt)));
+    transition: transform .18s ease, box-shadow .18s ease;
+    animation: arc-pop .5s cubic-bezier(.34,1.6,.5,1) both; cursor:pointer; }
+  @keyframes arc-pop { from { opacity:0; transform:rotateX(calc(-1 * var(--tilt))) scale(.2) } }
+  .arc-head-dot.done { background:currentColor; }
+  .arc-head-dot:not(.done) { background:var(--bg); }
+  .arc-pin:hover .arc-head-dot, .arc-head-dot:focus-visible {
+    transform: rotateX(calc(-1 * var(--tilt))) scale(1.45); box-shadow:0 0 16px currentColor; outline:none; }
+  .arc-tag { position:absolute; left:14px; white-space:nowrap; opacity:0;
+    transform: rotateX(calc(-1 * var(--tilt))) rotateZ(calc(-1 * var(--spin,0deg)));
+    transform-origin:0 50%; font-family:var(--mono); font-size:10.5px; letter-spacing:.06em;
+    background:var(--surface); border:1px solid var(--line); padding:5px 9px; border-radius:7px;
+    color:var(--ink); transition:opacity .16s ease; pointer-events:none; }
+  .arc-pin:hover .arc-tag, .arc-head-dot:focus-visible ~ .arc-tag { opacity:1; }
+
+  .arc-hud { position:absolute; left:50%; top:42%; transform:translate(-50%,-50%);
+    text-align:center; pointer-events:none; animation:arc-fade .8s ease 1.9s both; }
+  @keyframes arc-fade { from { opacity:0; transform:translate(-50%,-42%) } }
+  .arc-cap { font-family:var(--mono); font-size:9.5px; letter-spacing:.2em;
+    text-transform:uppercase; color:var(--faint); }
+  .arc-pct { font-family:var(--mono); font-size:38px; font-weight:600; color:var(--moss);
+    font-variant-numeric:tabular-nums; line-height:1; margin:5px 0 6px;
+    text-shadow:0 0 26px rgba(143,206,138,.35); }
+  .arc-state { font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; }
+  .arc-clock { font-family:var(--mono); font-size:10px; color:var(--muted);
+    margin-top:4px; font-variant-numeric:tabular-nums; }
+
+  /* ---- mobile: opens on demand, full-screen ---- */
+  .arc-overlay { display:none; position:fixed; inset:0; background:var(--bg); z-index:35;
+    overflow-y:auto; padding:calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom)); }
+  .arc-overlay.open { display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .arc-overlay .arc-stage { width:100%; max-width:420px; aspect-ratio:1; margin:0 auto; }
+  .arc-close { position:fixed; top:calc(16px + env(safe-area-inset-top)); right:16px;
+    width:36px; height:36px; border-radius:50%; background:var(--surface); border:1px solid var(--line);
+    color:var(--ink); font-size:15px; z-index:36; }
+
+  /* ---- the status block becomes the mobile open-trigger ---- */
+  .progress-wrap { cursor:pointer; border-radius:10px; transition:background-color .12s ease; }
+  .progress-wrap:active { background:var(--line); }
+  .eat-subrow { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .eat-edit { flex-shrink:0; background:none; border:none; color:var(--faint); font-size:11px;
+    padding:3px 4px; line-height:1; }
+  .eat-edit:active { color:var(--muted); }
+
   .link-btn { width:100%; margin-top:6px; padding:12px; border-radius:10px; background:var(--frost-soft);
     color:var(--frost); border:none; font-size:14px; font-weight:600; }
 
@@ -570,6 +657,18 @@
     .rail-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); }
     .rail-empty { font-size:12.5px; color:var(--faint); }
 
+    /* Day arc: always on screen here instead of behind a tap, sized to the
+       rail's own width. perspective is tightened for the smaller box —
+       1150px (the reference's value, tuned for a ~460px stage) reads as an
+       exaggerated tilt at 240px, so a bigger number flattens it back down. */
+    #arcRailWrap { display:block; margin-bottom:2px; }
+    #arcRailWrap .arc-stage { width:100%; max-width:240px; aspect-ratio:1; margin:0 auto; perspective:2000px; }
+    #arcRailWrap .arc-hud { top:44%; }
+    #arcRailWrap .arc-pct { font-size:26px; margin:4px 0 4px; }
+    /* No longer a tappable trigger — the arc is already on screen. */
+    .rail-right .progress-wrap { cursor:default; }
+    .rail-right .progress-wrap:active { background:none; }
+
     /* The floating + becomes a labelled button docked to the left rail —
        still position:fixed (robust regardless of the rail's content height,
        same reasoning as the phone version), just bottom-left of that
@@ -626,13 +725,21 @@
     <button onclick="shiftDay(1)">›</button>
   </div>
   <aside class="rail-right" id="railRight">
-  <div class="progress-wrap" id="progWrap">
+  <!-- Desktop-only: the day arc, always on screen here. Filled by
+       arcStageHTML('rail') at boot; unhidden by the (min-width:900px)
+       query the same way #railAgenda/#railTasks are. -->
+  <div id="arcRailWrap" hidden></div>
+  <div class="progress-wrap" id="progWrap" role="button" tabindex="0" aria-label="Open day arc"
+    onclick="arcBlockTap()" onkeydown="arcBlockKey(event)">
     <div class="status-head">
       <div class="status-left"><span class="pct" id="pct">0%</span><span class="pct-sub">done</span></div>
     </div>
     <div class="progress-track"><div class="progress-bar" id="bar"></div></div>
     <div class="eat-track" id="eatTrack"><div class="eat-fill" id="eatFill"></div></div>
-    <div class="eat-line" id="eatHead" onclick="openEatSheet()"></div>
+    <!-- No onclick here anymore — the whole block (#progWrap) now opens the
+         arc on tap; editing the window moved to the ✎ inside, rendered by
+         renderEatWindow() with its own stopPropagation. -->
+    <div class="eat-line" id="eatHead"></div>
   </div>
   <!-- Desktop-only: populated by renderRail(). Stays hidden on mobile via
        the [hidden] attribute — the (min-width:900px) query is the only place
@@ -660,6 +767,14 @@
 
 <button class="fab" onclick="openSheet('add')" aria-label="Add">+<span class="fab-label" hidden>Add</span></button>
 <div class="undo-toast" id="undoToast"></div>
+
+<!-- Mobile-only: the day arc as a full-screen overlay, opened by tapping
+     the status block. touch-action:none lives on .arc-stage only (set in
+     CSS), so this outer element can still scroll if content overflows. -->
+<div class="arc-overlay" id="arcOverlay" onclick="arcOverlayTap(event)">
+  <button class="arc-close" onclick="arcCloseMobile()" aria-label="Close day arc">✕</button>
+  <div id="arcOvStageHost"></div>
+</div>
 
 <div class="overlay" id="overlay">
   <div class="sheet">
@@ -1377,12 +1492,21 @@ function renderEatWindow(){
   if(!show){ head.innerHTML=''; return; }
   const st=eatingState(now);
   wrap.classList.add(st.mode==='eating'?'eat-eating':'eat-fasting');
+  // The whole block now opens the day arc on tap (see #progWrap's onclick),
+  // so "tap to edit" no longer applies to the block as a whole — the ✎
+  // keeps that reachable on its own, with stopPropagation so it doesn't
+  // also open the arc. Desktop drops the hint text since the block is inert
+  // there (arc is already inline in the rail), but keeps the ✎.
+  const tapHint=isDesktopLayout()?'':' · tap for day arc';
   head.innerHTML=`
     <div class="eat-row">
       <span class="eat-label">${st.mode==='eating'?'Eating window':'Fasting'}</span>
       <span class="eat-left">${hm(st.left)} ${st.mode==='eating'?'left':'until '+hoursToHHMM(EAT_START)}</span>
     </div>
-    <span class="eat-sub">${hoursToHHMM(EAT_START)} – ${hoursToHHMM(EAT_END)} · tap to edit</span>`;
+    <div class="eat-subrow">
+      <span class="eat-sub">${hoursToHHMM(EAT_START)} – ${hoursToHHMM(EAT_END)}${tapHint}</span>
+      <button class="eat-edit" onclick="event.stopPropagation();openEatSheet()" aria-label="Edit eating window">✎</button>
+    </div>`;
   document.getElementById('eatFill').style.width=Math.max(0,Math.min(100,st.pct))+'%';
 }
 
@@ -1698,7 +1822,7 @@ function syncHeaderHeight(){
   // stylesheet's own value (the safe-area inset) in place instead.
   document.body.style.paddingTop=isDesktopLayout()?'':h.offsetHeight+'px';
 }
-window.addEventListener('resize',()=>{ syncHeaderHeight(); renderRail(); });
+window.addEventListener('resize',()=>{ syncHeaderHeight(); renderRail(); arcOnResize(); });
 
 // Desktop-only right rail: today's agenda and today's open tasks, condensed.
 // Fixed to the actual calendar day, not viewDate — the rail doesn't navigate
@@ -1740,9 +1864,319 @@ function render(){
   else if(activeTab==='tasks') renderTasks(c);
   else if(activeTab==='cal') renderCalendar(c);
   else renderBio(c);
-  renderProgress(); renderEatWindow(); renderRail(); saveAll();
+  renderProgress(); renderEatWindow(); renderRail(); renderArc(); saveAll();
   syncHeaderHeight();
 }
+
+/* ================= Day Arc (ported from day-arc-3d.html) =================
+   Two independent instances share this data/build logic: the desktop right
+   rail (-rail, always on screen) and the mobile full-screen overlay (-ov,
+   opens on tap). Real data, not the demo's hardcoded array — pins come from
+   activeRoutinesOn(viewDate) + supplement blocks with items + timed visible
+   tasks for viewDate; "done" is the actual tick, never a time comparison.
+   Category colours reuse the app's own mapping (health frost, sport clay,
+   mental moss, others/event amber-or-frost per .tag rules, tasks amber
+   per .tag.task, supplements frost per the app's own convention). */
+const ARC_CAT_COLOR={health:'frost',sport:'clay',mental:'moss',planning:'amber',event:'frost'};
+const ARC_NS='http://www.w3.org/2000/svg', ARC_CX=200, ARC_CY=200, ARC_R=150;
+const arcHours=t=>{ const [h,m]=t.split(':').map(Number); return h+m/60; };
+const arcAngle=h=>(h/24)*360-90;
+const arcPoint=(h,r)=>{ const a=arcAngle(h)*Math.PI/180; return [ARC_CX+r*Math.cos(a),ARC_CY+r*Math.sin(a)]; };
+const svgEl=(tag,a={})=>{ const e=document.createElementNS(ARC_NS,tag); for(const k in a) e.setAttribute(k,a[k]); return e; };
+function arcArcPath(from,to,r){
+  const [x1,y1]=arcPoint(from,r), [x2,y2]=arcPoint(to,r);
+  return `M ${x1} ${y1} A ${r} ${r} 0 ${(to-from)>12?1:0} 1 ${x2} ${y2}`;
+}
+function arcStageHTML(suffix){
+  return `<div class="arc-stage" id="arcStage-${suffix}">
+      <div class="arc-disc" id="arcDisc-${suffix}">
+        <div class="arc-layer arc-depth-3"><svg viewBox="0 0 400 400" id="arcD3-${suffix}"></svg></div>
+        <div class="arc-layer arc-depth-2"><svg viewBox="0 0 400 400" id="arcD2-${suffix}"></svg></div>
+        <div class="arc-layer arc-depth-1"><svg viewBox="0 0 400 400" id="arcD1-${suffix}"></svg></div>
+        <div class="arc-layer arc-plate"><svg viewBox="0 0 400 400" id="arcPlate-${suffix}"></svg></div>
+        <div class="arc-layer arc-band"><svg viewBox="0 0 400 400" id="arcBand-${suffix}"></svg></div>
+        <div class="arc-layer" id="arcPins-${suffix}"></div>
+      </div>
+      <div class="arc-hud" id="arcHud-${suffix}"></div>
+    </div>`;
+}
+function arcNode(base,suffix){ return document.getElementById(base+'-'+suffix); }
+
+let arcMobileOpen=false;
+const arcState={
+  rail:{ built:false, dragBound:false, pinSig:null, staticSig:null, spin:0, tilt:60, dragging:false, sx:0, sy:0 },
+  ov:  { built:false, dragBound:false, pinSig:null, staticSig:null, spin:0, tilt:60, dragging:false, sx:0, sy:0 }
+};
+
+// Optional routines switched off for viewDate are already excluded by
+// activeRoutinesOn(); cat:'event' one-off entries ride along inside it too
+// (they're just ROUTINES-array rows), which is why they need no separate
+// branch here — sheetTypeFor() sorts routine vs event out by id when the
+// sheet opens.
+function arcItems(){
+  const mr=marks(state), ms=marks(suppState);
+  const routines=activeRoutinesOn(viewDate).map(r=>({
+    key:'r:'+r.id, time:r.time, name:r.title,
+    colorVar:ARC_CAT_COLOR[r.cat]||'frost', done:!!mr[r.id],
+    tap:()=>arcOpenRoutine(r.id)
+  }));
+  const supps=SUPP_BLOCKS.filter(b=>b.items.length).map(b=>({
+    key:'s:'+b.id, time:b.time, name:'Supplements · '+b.title,
+    colorVar:'frost', done:b.items.every(i=>ms[i.id]),
+    tap:()=>arcOpenSupp()
+  }));
+  const dayKey=key(viewDate);
+  const tasks=visibleTasks().filter(t=>t.time&&t.date===dayKey).map(t=>({
+    key:'t:'+t.id, time:t.time, name:t.title||'Untitled',
+    colorVar:'amber', done:!!t.done,
+    tap:()=>arcOpenTask(t.id)
+  }));
+  return [...routines,...supps,...tasks].sort((a,b)=>a.time.localeCompare(b.time));
+}
+
+// Same activeTab-bracketing trick already used for edit-from-agenda: it's
+// what makes sheetTypeFor()/openSheet() resolve the right sheet type for an
+// id it wasn't opened from, then puts the tab back exactly as it was.
+function arcOpenRoutine(id){
+  arcCloseMobile();
+  const prev=activeTab; activeTab='routine'; openSheet('edit',id); activeTab=prev;
+}
+function arcOpenTask(id){
+  arcCloseMobile();
+  const prev=activeTab; activeTab='tasks'; openSheet('edit',id); activeTab=prev;
+}
+function arcOpenSupp(){
+  arcCloseMobile();
+  setTab('supps');
+}
+
+function arcBuildStatic(suffix){
+  ['arcD1','arcD2','arcD3'].forEach(base=>{
+    const svg=arcNode(base,suffix); if(!svg) return; svg.innerHTML='';
+    svg.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:'none',stroke:'var(--ink)','stroke-width':1}));
+  });
+  const plate=arcNode('arcPlate',suffix); if(!plate) return;
+  plate.innerHTML='';
+  const gradId='arcPlateGlow-'+suffix;
+  const grad=svgEl('radialGradient',{id:gradId});
+  grad.appendChild(svgEl('stop',{offset:'0%','stop-color':'#1b2a26','stop-opacity':'.85'}));
+  grad.appendChild(svgEl('stop',{offset:'100%','stop-color':'#1b2a26','stop-opacity':'0'}));
+  const defs=svgEl('defs'); defs.appendChild(grad); plate.appendChild(defs);
+  plate.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:`url(#${gradId})`}));
+  plate.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:'none',stroke:'var(--line)','stroke-width':1}));
+  for(let h=0;h<24;h++){
+    const major=h%6===0;
+    const [x1,y1]=arcPoint(h,ARC_R-(major?12:6)), [x2,y2]=arcPoint(h,ARC_R);
+    plate.appendChild(svgEl('line',{x1,y1,x2,y2,stroke:'var(--line)','stroke-width':major?1.4:1}));
+    if(major){
+      const [lx,ly]=arcPoint(h,ARC_R-30);
+      const t=svgEl('text',{x:lx,y:ly,'text-anchor':'middle','dominant-baseline':'middle',
+        fill:'var(--faint)','font-size':11,'font-family':'var(--mono)','letter-spacing':'.08em'});
+      t.textContent=String(h).padStart(2,'0');
+      plate.appendChild(t);
+    }
+  }
+  const fast=svgEl('path',{d:arcArcPath(EAT_END,EAT_START+24,ARC_R),fill:'none',
+    stroke:'var(--rose)','stroke-width':3,'stroke-linecap':'round',opacity:.26});
+  fast.classList.add('arc-draw'); fast.style.setProperty('--arc-len',2*Math.PI*ARC_R);
+  plate.appendChild(fast);
+  // Placeholder now-hand — arcUpdateNowLine() moves/shows it every refresh
+  // without touching the rest of the plate.
+  plate.appendChild(svgEl('line',{id:'arcNowLine-'+suffix,x1:ARC_CX,y1:ARC_CY,x2:ARC_CX,y2:ARC_CY,
+    stroke:'var(--rose)','stroke-width':1.5,'stroke-linecap':'round',opacity:.9}));
+  plate.appendChild(svgEl('circle',{id:'arcNowDot-'+suffix,cx:ARC_CX,cy:ARC_CY,r:4,fill:'var(--rose)'}));
+
+  const band=arcNode('arcBand',suffix); if(band){
+    band.innerHTML='';
+    const eat=svgEl('path',{d:arcArcPath(EAT_START,EAT_END,ARC_R),fill:'none',
+      stroke:'var(--moss)','stroke-width':7,'stroke-linecap':'round'});
+    eat.classList.add('arc-draw'); eat.style.setProperty('--arc-len',2*Math.PI*ARC_R);
+    band.appendChild(eat);
+  }
+  arcState[suffix].staticSig=EAT_START+'|'+EAT_END;
+}
+
+function arcBuildPins(suffix,items){
+  const pinsBox=arcNode('arcPins',suffix), stage=arcNode('arcStage',suffix);
+  if(!pinsBox||!stage) return;
+  pinsBox.innerHTML='';
+  const s=stage.clientWidth/400||0.6, oy=(stage.clientHeight-400*s)/2;
+  items.forEach((it,i)=>{
+    const [x,y]=arcPoint(arcHours(it.time),ARC_R);
+    const height=26+(it.done?10:0);
+
+    const p=document.createElement('div');
+    p.className='arc-pin'; p.dataset.key=it.key;
+    p.style.left=(x*s)+'px'; p.style.top=(y*s+oy)+'px';
+    p.style.color=`var(--${it.colorVar})`;
+
+    const stem=document.createElement('div');
+    stem.className='arc-stem'; stem.style.height=height+'px';
+    stem.style.animationDelay=(1.1+i*0.05)+'s';
+
+    const dot=document.createElement('div');
+    dot.className='arc-head-dot'+(it.done?' done':'');
+    dot.style.bottom=(height-6.5)+'px';
+    dot.style.animationDelay=(1.15+i*0.05)+'s';
+    dot.setAttribute('role','button'); dot.setAttribute('tabindex','0');
+    dot.setAttribute('aria-label',it.time+' '+it.name);
+    dot.onclick=it.tap;
+    dot.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); it.tap(); } };
+
+    const tag=document.createElement('div');
+    tag.className='arc-tag'; tag.textContent=it.time+'  '+it.name;
+    tag.style.bottom=(height-9)+'px';
+
+    p.append(stem,dot,tag);
+    pinsBox.appendChild(p);
+  });
+  arcState[suffix].pinSig=items.map(it=>it.key+it.time).join(',');
+}
+
+function arcHudHTML(items){
+  const total=items.length, done=items.filter(i=>i.done).length;
+  const pct=total?Math.round(done/total*100):0;
+  const isToday=sameDay(viewDate,new Date());
+  if(isToday){
+    const now=new Date(), st=eatingState(now);
+    const leftLbl=st.left.toFixed(1).replace('.0','')+'H';
+    return `<div class="arc-cap">Today</div>
+      <div class="arc-pct">${pct}%</div>
+      <div class="arc-state" style="color:${st.mode==='eating'?'var(--moss)':'var(--rose)'}">
+        ${st.mode==='eating'?'EATING · '+leftLbl+' LEFT':'FASTING'}</div>
+      <div class="arc-clock">${pad(now.getHours())}:${pad(now.getMinutes())} · ${done}/${total} done</div>`;
+  }
+  const lbl=viewDate.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+  return `<div class="arc-cap">${esc(lbl)}</div>
+    <div class="arc-pct">${pct}%</div>
+    <div class="arc-state" style="color:var(--muted)">COMPLETION</div>
+    <div class="arc-clock">${done}/${total} done</div>`;
+}
+
+function arcUpdateNowLine(suffix){
+  const line=document.getElementById('arcNowLine-'+suffix), dot=document.getElementById('arcNowDot-'+suffix);
+  if(!line||!dot) return;
+  const isToday=sameDay(viewDate,new Date());
+  line.style.display=isToday?'':'none'; dot.style.display=isToday?'':'none';
+  if(!isToday) return;
+  const now=new Date(), [nx,ny]=arcPoint(now.getHours()+now.getMinutes()/60,ARC_R);
+  line.setAttribute('x2',nx); line.setAttribute('y2',ny);
+  dot.setAttribute('cx',nx); dot.setAttribute('cy',ny);
+}
+
+// Rebuilds only what changed since the last call: the static rings/plate/
+// band redraw if the eating window was edited, pins redraw (with their
+// entrance animation) only if the actual set/order of items differs —
+// ticking a routine changes done-state in place instead, so the always-
+// visible desktop rail never replays its entrance on every tick.
+function arcRefresh(suffix){
+  const st=arcState[suffix], items=arcItems();
+  const staticSig=EAT_START+'|'+EAT_END;
+  if(staticSig!==st.staticSig) arcBuildStatic(suffix);
+  const pinSig=items.map(it=>it.key+it.time).join(',');
+  if(pinSig!==st.pinSig){
+    arcBuildPins(suffix,items);
+  } else {
+    const pinsBox=arcNode('arcPins',suffix);
+    if(pinsBox) [...pinsBox.children].forEach((p,i)=>{
+      const it=items[i]; if(!it) return;
+      const height=26+(it.done?10:0);
+      const dot=p.querySelector('.arc-head-dot'); if(dot) dot.classList.toggle('done',!!it.done);
+      const stem=p.querySelector('.arc-stem'); if(stem) stem.style.height=height+'px';
+      if(dot) dot.style.bottom=(height-6.5)+'px';
+      const tag=p.querySelector('.arc-tag'); if(tag) tag.style.bottom=(height-9)+'px';
+    });
+  }
+  arcUpdateNowLine(suffix);
+  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML(items);
+}
+
+function arcAttachDrag(suffix){
+  const st=arcState[suffix];
+  if(st.dragBound) return;
+  const stage=arcNode('arcStage',suffix), disc=arcNode('arcDisc',suffix);
+  if(!stage||!disc) return;
+  st.dragBound=true;
+  const apply=()=>{ disc.style.setProperty('--spin',st.spin+'deg'); disc.style.setProperty('--tilt',st.tilt+'deg'); };
+  stage.addEventListener('pointerdown',e=>{
+    st.dragging=true; st.sx=e.clientX; st.sy=e.clientY;
+    disc.style.animation='none'; stage.setPointerCapture(e.pointerId);
+  });
+  stage.addEventListener('pointermove',e=>{
+    if(!st.dragging) return;
+    st.spin+=(e.clientX-st.sx)*0.35;
+    st.tilt=Math.min(82,Math.max(22,st.tilt+(e.clientY-st.sy)*0.22));
+    st.sx=e.clientX; st.sy=e.clientY; apply();
+  });
+  stage.addEventListener('pointerup',()=>{ st.dragging=false; });
+  stage.addEventListener('pointercancel',()=>{ st.dragging=false; });
+}
+
+function arcBuildFull(suffix){
+  const disc=arcNode('arcDisc',suffix);
+  if(disc && arcState[suffix].built){
+    // Force the settle animation to replay — it only runs once per element
+    // otherwise, and a mobile re-open should feel like a fresh entrance.
+    disc.style.animation='none'; void disc.offsetWidth; disc.style.animation='';
+  }
+  arcBuildStatic(suffix);
+  const items=arcItems();
+  arcBuildPins(suffix,items);
+  arcUpdateNowLine(suffix);
+  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML(items);
+  arcState[suffix].built=true;
+  arcAttachDrag(suffix);
+}
+
+// Desktop: build once, then just refresh in place on every render(). Mobile:
+// only does anything while the overlay is open (arcOpenMobile() does the
+// initial full build itself).
+function renderArc(){
+  document.getElementById('progWrap').tabIndex=isDesktopLayout()?-1:0;
+  if(isDesktopLayout()){
+    if(!arcState.rail.built) arcBuildFull('rail'); else arcRefresh('rail');
+  } else if(arcMobileOpen){
+    arcRefresh('ov');
+  }
+}
+// Lightweight per-minute tick (now-hand + HUD clock only) for whichever
+// instance is actually on screen, mirroring updateNowLine()'s own interval.
+function arcTick(){
+  const suffix=isDesktopLayout()?'rail':(arcMobileOpen?'ov':null);
+  if(!suffix||!arcState[suffix].built) return;
+  arcUpdateNowLine(suffix);
+  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML(arcItems());
+}
+function arcOnResize(){
+  if(isDesktopLayout()){ if(arcState.rail.built) arcBuildPins('rail',arcItems()); }
+  else if(arcMobileOpen){ arcBuildPins('ov',arcItems()); }
+}
+
+function arcBlockTap(){
+  if(isDesktopLayout()) return;   // inert there — the arc is already inline in the rail
+  arcOpenMobile();
+}
+function arcBlockKey(e){
+  if(e.key!=='Enter'&&e.key!==' ') return;
+  e.preventDefault(); arcBlockTap();
+}
+function arcOpenMobile(){
+  arcMobileOpen=true;
+  document.getElementById('arcOverlay').classList.add('open');
+  arcBuildFull('ov');
+}
+function arcCloseMobile(){
+  if(!arcMobileOpen) return;
+  arcMobileOpen=false;
+  document.getElementById('arcOverlay').classList.remove('open');
+}
+function arcOverlayTap(e){
+  if(e.target.id==='arcOverlay') arcCloseMobile();   // tap outside the stage/close button
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&arcMobileOpen) arcCloseMobile(); });
+
+document.getElementById('arcRailWrap').innerHTML=arcStageHTML('rail');
+document.getElementById('arcOvStageHost').innerHTML=arcStageHTML('ov');
 
 function renderRoutine(c){
   let items=visibleRoutines();
@@ -3443,7 +3877,7 @@ if(ANCHORED_TABS.includes(activeTab)) scrollToAnchor();
 document.getElementById('tabs').addEventListener('scroll',syncTabFade,{passive:true});
 window.addEventListener('resize',syncTabFade);
 syncTabFade();
-setInterval(()=>{ renderEatWindow(); updateNowLine(); },60000);
+setInterval(()=>{ renderEatWindow(); updateNowLine(); arcTick(); },60000);
 if(SUBS.length){ startSubTimer(); subFetchAll(true); }
 </script>
 </body>
