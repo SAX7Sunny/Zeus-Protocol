@@ -1207,7 +1207,7 @@
      and never blocking: the app underneath is already rendered behind it. -->
 <div class="boot" id="boot" hidden onclick="bootDismiss()">
   <div class="boot-inner" id="bootInner"></div>
-  <div class="boot-skip">Tap to dismiss</div>
+  <div class="boot-skip" id="bootSkip">Tap to dismiss</div>
 </div>
 
 <div class="arc-overlay" id="arcOverlay" onclick="arcOverlayTap(event)">
@@ -4904,7 +4904,8 @@ function briefingSpeech(){
   const st=eatingState(now);
   const nx=arcNextUp();
   const hello=hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
-  const parts=[hello+', sir. All systems online.'];
+  // Spoken only — the on-screen briefing stays sober.
+  const parts=['Alright, alright, alright.', hello+', sir. All systems online.'];
   parts.push(total
     ? `You are ${pct} percent through the day. ${done} of ${total} complete.`
     : 'Nothing is scheduled today.');
@@ -4923,8 +4924,9 @@ function briefSetSpeaking(on){
   const b=document.getElementById('bootSpeak');
   if(b){ b.classList.toggle('on',on); b.textContent=on?'◼ Stop':'▶ Brief me'; }
   // While it is talking the overlay stays put; once it finishes, let the
-  // normal dismissal resume rather than stranding the briefing on screen.
-  if(!on && document.getElementById('boot') && !document.getElementById('boot').hidden){
+  // normal dismissal resume rather than stranding the briefing on screen —
+  // unless this was opened by hand, which never times out.
+  if(!on && !bootManual && document.getElementById('boot') && !document.getElementById('boot').hidden){
     clearTimeout(bootTimer);
     bootTimer=setTimeout(bootDismiss,1600);
   }
@@ -4989,8 +4991,19 @@ function bootLines(){
 }
 
 let bootTimer=null;
-function bootShow(){
+/* manual = opened deliberately from the header mark, which is the one case
+   that must NOT time out: you asked for it, so it waits to be dismissed.
+   The once-a-day automatic open still closes itself — it appears unbidden,
+   possibly while you are mid-something, and blocking every launch behind a
+   tap would be worse than the briefing vanishing unread. */
+let bootManual=false;
+function bootShow(manual){
   const el=document.getElementById('boot'); if(!el) return;
+  // Any pending dismissal belongs to the previous showing. Without this, the
+  // automatic morning briefing's timer keeps running and closes a briefing
+  // you reopened from the mark seconds later.
+  clearTimeout(bootTimer);
+  bootManual=!!manual;
   document.getElementById('bootInner').innerHTML=bootLines();
   if(!briefVoice) briefVoice=briefPickVoice();
   el.hidden=false;
@@ -4998,7 +5011,7 @@ function bootShow(){
   // The last line finishes arriving at ~1.5s, so this is dwell time on a
   // fully-formed briefing, not time spent waiting for it to assemble.
   // A tap still dismisses instantly, so erring long costs nothing.
-  bootTimer=setTimeout(bootDismiss, bootReduced()?3600:5600);
+  if(!bootManual) bootTimer=setTimeout(bootDismiss, bootReduced()?3600:5600);
 }
 function bootDismiss(){
   const el=document.getElementById('boot');
@@ -5022,11 +5035,11 @@ function bootMaybeShow(){
   const today=key(new Date());
   if(seen===today) return;
   try{ localStorage.setItem(BOOT_KEY,today); }catch(e){}
-  bootShow();
+  bootShow(false);
 }
 // Replayable on demand from the header mark, so it is not a once-a-day-only
 // curiosity you cannot look at again.
-function bootReplay(){ bootShow(); }
+function bootReplay(){ bootShow(true); }
 
 loadAll();
 render();
