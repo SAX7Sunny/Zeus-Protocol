@@ -78,7 +78,8 @@ Bio tab can read them without caring where they came from.
 
 ## Phase 6 — packaging as a real app
 
-Three routes, cheapest first. Not urgent: the web app already works from the
+Three routes, cheapest first (6.1–6.3), then one feature that depends on
+which route is taken (6.4). Not urgent: the web app already works from the
 home screen.
 
 ### 6.1 PWA polish — do this regardless
@@ -107,6 +108,38 @@ structure. That trade-off should be a deliberate decision, not a side effect.
 Swift or React Native. Best performance, but starts from zero and discards
 everything built so far. Recorded only for completeness.
 
+### 6.4 Home-screen widgets — wanted, blocked twice over
+
+Asked for in August 2026. Not possible from the current architecture, for two
+independent reasons, and the second is the one that bites:
+
+**Rendering.** iOS widgets exist only through WidgetKit, in SwiftUI. There is
+no web API for them and none is coming from Apple. Under iOS 26 a site added
+to the home screen opens as a web app by default, but that changes nothing
+here — widgets stayed native. (Windows does support PWA widgets; Apple does
+not, so anything written about "PWA widgets" generally does not apply to
+iPhone.)
+
+**Data.** Everything lives in `localStorage` under this origin. No other
+process on the phone can read it, a native widget included. So a widget is
+gated on phase 5 first: there has to be a data source reachable from outside
+the browser before there is anything to render.
+
+Routes, once phase 5 exists:
+
+- **Scriptable** — widgets written in JavaScript, reading a URL. Free, no
+  App Store, no €99/year. Cheapest way to get "next up" or the day's
+  percentage onto the home screen, and it needs no change to this repo
+  beyond an endpoint to read.
+- **Capacitor plus a WidgetKit extension** — the real thing. Shares data with
+  the widget through an App Group. Only sensible if 6.2 happens anyway; the
+  widget alone does not justify its costs.
+- **Shortcuts** — not a widget, but a home-screen shortcut can surface a
+  value. Ugly, works today, worth remembering as a stopgap.
+
+Sequencing: **do not start this before phase 5.** Building it against
+`localStorage` means building it twice.
+
 ### Decision point
 
 Whether to go beyond 6.1 hinges on one question: **is native Apple Health
@@ -118,6 +151,9 @@ install a Shortcut of their own — Capacitor becomes the answer.
 A second, non-technical argument: distributing through the App Store reaches
 people who will not save a URL to their home screen. That matters only once
 there are real users.
+
+Home-screen widgets (6.4) now sit on the Capacitor side of this decision too —
+Scriptable can cover the simple cases without it, but only after phase 5.
 
 ---
 
