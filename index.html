@@ -4830,11 +4830,32 @@ function exportEverything(){
        default is perfectly good, and a better one is adopted if it turns
        up later. */
 const speechOK=()=>'speechSynthesis' in window && typeof SpeechSynthesisUtterance!=='undefined';
+/* Voice selection, in descending order of how much it sounds like Jarvis.
+   The real thing is Paul Bettany, which would need a cloned voice served
+   over a network — impossible inside the one-file rule. The closest
+   available is a British male system voice: Daniel is Apple's canonical
+   en-GB male and present on both iOS and macOS, Arthur and Malcolm are
+   newer Apple additions, the Google name covers Chrome and Android.
+   SpeechSynthesisVoice exposes no gender field (it is not in the spec), so
+   matching by name is the only reliable way to avoid landing on a female
+   voice — hence a name list rather than a filter. */
+const JARVIS_VOICES=['daniel','arthur','malcolm','oliver','google uk english male'];
 let briefVoice=null;
 function briefPickVoice(){
   let vs=[]; try{ vs=speechSynthesis.getVoices()||[]; }catch(e){ return null; }
   if(!vs.length) return null;
-  // A local voice avoids a network round-trip on platforms that stream them.
+  const named=n=>vs.find(v=>(v.name||'').toLowerCase().includes(n));
+  for(const n of JARVIS_VOICES){
+    const v=named(n);
+    // Enhanced/Premium variants share the base name and sound far better,
+    // so prefer whichever match is local — those are the downloaded ones.
+    if(v){
+      const better=vs.filter(x=>(x.name||'').toLowerCase().includes(n));
+      return better.find(x=>x.localService)||v;
+    }
+  }
+  const gb=vs.filter(v=>/^en[-_]GB/i.test(v.lang||''));
+  if(gb.length) return gb.find(v=>v.localService)||gb[0];
   const en=vs.filter(v=>/^en/i.test(v.lang||''));
   return en.find(v=>v.localService)||en[0]||null;
 }
@@ -4856,21 +4877,26 @@ const spokenHM=x=>{
 const spokenTime=t=>{ const [h,m]=t.split(':').map(Number);
   return m===0 ? h+" o'clock" : h+':'+pad(m); };
 
+/* Jarvis's register: formal, dry, addresses you as sir — once at the open
+   and once at the close, since every sentence would be parody. Punctuation
+   is doing real work here; synthesisers pause on commas and full stops, and
+   that measured cadence is as much of the character as the accent. */
 function briefingSpeech(){
   const now=new Date(), hr=now.getHours();
   const {total,done,pct}=arcCompletionPct();
   const st=eatingState(now);
   const nx=arcNextUp();
   const hello=hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
-  const parts=[hello+'. Zeus online.'];
+  const parts=[hello+', sir. All systems online.'];
   parts.push(total
     ? `You are ${pct} percent through the day. ${done} of ${total} complete.`
-    : 'Nothing scheduled today.');
+    : 'Nothing is scheduled today.');
   parts.push(st.mode==='eating'
-    ? `Eating window is open, ${spokenHM(st.left)} remaining.`
-    : `Fasting for another ${spokenHM(st.left)}.`);
-  parts.push(nx ? `Next up at ${spokenTime(nx.time)}, ${nx.name}.`
-                : 'Nothing further scheduled today.');
+    ? `Your eating window is open, with ${spokenHM(st.left)} remaining.`
+    : `Fasting continues for a further ${spokenHM(st.left)}.`);
+  parts.push(nx
+    ? `Next on your schedule, ${spokenTime(nx.time)}. ${nx.name}.`
+    : 'Nothing further is scheduled today, sir.');
   return parts.join(' ');
 }
 
@@ -4897,7 +4923,9 @@ function briefSpeak(e){
     const u=new SpeechSynthesisUtterance(briefingSpeech());
     const v=briefVoice||briefPickVoice();
     if(v){ u.voice=v; u.lang=v.lang||'en-GB'; } else { u.lang='en-GB'; }
-    u.rate=1; u.pitch=1;
+    // Measured and slightly lowered. Jarvis is never hurried, and the
+    // default rate reads as a station announcement rather than an aide.
+    u.rate=0.92; u.pitch=0.9;
     u.onend=()=>briefSetSpeaking(false);
     u.onerror=()=>briefSetSpeaking(false);
     briefSetSpeaking(true);
