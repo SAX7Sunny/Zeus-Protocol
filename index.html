@@ -2396,7 +2396,9 @@ function render(){
    per .tag.task, supplements frost per the app's own convention). */
 const ARC_CAT_COLOR={health:'frost',sport:'clay',mental:'moss',planning:'amber',event:'frost'};
 const ARC_NS='http://www.w3.org/2000/svg', ARC_CX=200, ARC_CY=200, ARC_R=150;
-const arcHours=t=>{ const [h,m]=t.split(':').map(Number); return h+m/60; };
+// 'HH:MM' -> decimal hours. Used by the arc's geometry and by the
+// systems readout to decide what is already past due.
+const hhmmHours=t=>{ const [h,m]=t.split(':').map(Number); return h+m/60; };
 const arcAngle=h=>(h/24)*360-90;
 const arcPoint=(h,r)=>{ const a=arcAngle(h)*Math.PI/180; return [ARC_CX+r*Math.cos(a),ARC_CY+r*Math.sin(a)]; };
 const svgEl=(tag,a={})=>{ const e=document.createElementNS(ARC_NS,tag); for(const k in a) e.setAttribute(k,a[k]); return e; };
@@ -2563,10 +2565,10 @@ function arcBuildStatic(suffix){
 // instead of leaving them all at ARC_R.
 function arcDeclutter(items){
   const CLUSTER_DEG=9, STEP=26;
-  const sorted=[...items].sort((a,b)=>arcHours(a.time)-arcHours(b.time));
+  const sorted=[...items].sort((a,b)=>hhmmHours(a.time)-hhmmHours(b.time));
   const clusters=[];
   sorted.forEach(it=>{
-    const h=arcHours(it.time), last=clusters[clusters.length-1];
+    const h=hhmmHours(it.time), last=clusters[clusters.length-1];
     if(last && (h-last.h)*15<=CLUSTER_DEG){ last.items.push(it); last.h=h; }
     else clusters.push({h,items:[it]});
   });
@@ -2584,7 +2586,7 @@ function arcBuildPins(suffix,items){
   pinsBox.innerHTML='';
   const s=stage.clientWidth/400||0.6, oy=(stage.clientHeight-400*s)/2;
   arcDeclutter(items).forEach((it,i)=>{
-    const [x,y]=arcPoint(arcHours(it.time),it.radius);
+    const [x,y]=arcPoint(hhmmHours(it.time),it.radius);
     const height=26+(it.done?10:0);
 
     const p=document.createElement('div');
@@ -2664,7 +2666,7 @@ function arcCompletionPct(){
 function arcNextUp(){
   if(!sameDay(viewDate,new Date())) return null;
   const now=new Date(), h=now.getHours()+now.getMinutes()/60;
-  return arcItems().find(it=>!it.done && arcHours(it.time)>=h) || null;
+  return arcItems().find(it=>!it.done && hhmmHours(it.time)>=h) || null;
 }
 
 function arcHudHTML(){
@@ -3218,15 +3220,51 @@ function systemsReport(){
   const out=[];
   const mr=marks(state), ms=marks(suppState);
 
-  const vr=activeRoutinesOn(viewDate), rd=vr.filter(r=>mr[r.id]).length;
-  out.push({key:'routine', label:'Routine',
-    detail:vr.length?rd+'/'+vr.length+' complete':'nothing scheduled',
-    state: !vr.length?'ok' : rd===vr.length?'ok' : rd/vr.length>=0.5?'watch':'warn'});
+  /* Time-aware, not a bare ratio. Something scheduled for tonight is not a
+     deviation at lunchtime, so only entries whose time has already passed
+     count against you; yesterday's leftovers are the red case. A completion
+     ratio alone reported half the day amber for no reason.
 
-  const vs=allSupps(), sd=vs.filter(s=>ms[s.id]).length;
-  out.push({key:'supps', label:'Supplements',
-    detail:vs.length?sd+'/'+vs.length+' taken':'none configured',
-    state: !vs.length?'ok' : sd===vs.length?'ok' : sd/vs.length>=0.5?'watch':'warn'});
+     Only meaningful while looking at today — a past or future day has no
+     "now" to be measured against, so those fall back to the plain count. */
+  const now=new Date(), nowH=now.getHours()+now.getMinutes()/60;
+  const isToday=sameDay(viewDate,new Date());
+  const yest=new Date(); yest.setDate(yest.getDate()-1); yest.setHours(0,0,0,0);
+  const marksOn=(store,d)=>store[key(d)]||{};
+  // "Open from yesterday" only counts if you were actually tracking
+  // yesterday. With no record for that day — a fresh install, or simply a
+  // day the app went untouched — every entry would read as missed and the
+  // panel would open on red for someone who has done nothing wrong.
+  const tracked=(store,d)=>Object.keys(marksOn(store,d)).length>0;
+
+  // Same shape for both rows, so they cannot drift apart.
+  const timeState=(label,items,doneOf,openYesterday,noneText,unit)=>{
+    const total=items.length;
+    if(!total){ out.push({key:label,label,detail:noneText,state:'ok'}); return; }
+    const done=items.filter(doneOf).length;
+    if(!isToday){
+      out.push({key:label,label,detail:done+'/'+total+' '+unit,
+        state:done===total?'ok':'watch'});
+      return;
+    }
+    const duePast=items.filter(i=>!doneOf(i)&&hhmmHours(i.at)<=nowH).length;
+    const detail = openYesterday ? openYesterday+' open from yesterday'
+      : duePast ? duePast+' past due · '+done+'/'+total
+      : done===total ? 'all '+unit : done+'/'+total+' '+unit+' · on track';
+    out.push({key:label,label,detail,
+      state: openYesterday?'warn' : duePast?'watch' : 'ok'});
+  };
+
+  const vr=activeRoutinesOn(viewDate).map(r=>({id:r.id,at:r.time}));
+  const yr=(isToday&&tracked(state,yest))?(()=>{ const ym=marksOn(state,yest);
+    return activeRoutinesOn(yest).filter(r=>!ym[r.id]).length; })():0;
+  timeState('Routine',vr,i=>!!mr[i.id],yr,'nothing scheduled','complete');
+
+  // Supplement times live on the block, not the item, so pair them up.
+  const vs=SUPP_BLOCKS.flatMap(b=>b.items.map(i=>({id:i.id,at:b.time})));
+  const ys=(isToday&&tracked(suppState,yest))?(()=>{ const ym=marksOn(suppState,yest);
+    return vs.filter(i=>!ym[i.id]).length; })():0;
+  timeState('Supplements',vs,i=>!!ms[i.id],ys,'none configured','taken');
 
   // Only meaningful for today — a past or future day has no "now" to be in.
   if(sameDay(viewDate,new Date())){
