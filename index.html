@@ -4834,15 +4834,21 @@ const speechOK=()=>'speechSynthesis' in window && typeof SpeechSynthesisUtteranc
    only the lowered pitch remains.
 
    Note this list OVERRIDES the phone's own default voice: setting Alex in
-   iOS Settings alone would not reach the app, because a named match here
-   wins. Kept as a list so a device without Alex still lands somewhere
-   deliberate — Nathan and Evan are the newer iOS American males, then the
-   Irish/British voices from the earlier FRIDAY direction. Matching by name
-   rather than filtering by language is deliberate: SpeechSynthesisVoice
-   exposes no gender field, so a plain en-US filter is a coin toss between
-   Samantha and Alex. */
-const VOICE_PREFS=['alex','nathan','evan','aaron','moira','órla','orla',
-                   'google us english','arthur','daniel'];
+   iOS Settings alone does not reach the app, because a named match here
+   wins over whatever the platform hands back.
+
+   Only American names are listed now. They previously ran on into moira,
+   órla, arthur and daniel, which produced the wrong outcome in the case
+   that actually matters: iOS exposes only a subset of the system voices to
+   web content, and Alex — a long-standing macOS voice — is frequently not
+   among them. Every American name then missed, 'moira' hit, and the
+   briefing spoke Irish despite Alex being selected on the device. With the
+   Irish and British names gone, an unmatched list falls through to the
+   locale passes below, which try en-US first. Matching by name rather than
+   filtering by language stays deliberate: SpeechSynthesisVoice exposes no
+   gender field, so a plain en-US filter is a coin toss between Samantha
+   and Alex. */
+const VOICE_PREFS=['alex','aaron','evan','nathan','tom','google us english'];
 const englishVoices=()=>{
   try{ return (speechSynthesis.getVoices()||[]).filter(v=>/^en/i.test(v.lang||'')); }
   catch(e){ return []; }
@@ -4861,7 +4867,7 @@ function briefPickVoice(){
   // inside a filter predicate affects neither which voices match nor the
   // order of the result, so a locale preference has to be an actual
   // sequence of passes. American first now, to match the named list.
-  for(const re of [/^en[-_]US/i, /^en[-_]IE/i, /^en[-_]GB/i]){
+  for(const re of [/^en[-_]US/i, /^en[-_]GB/i, /^en[-_]IE/i]){
     const pool=vs.filter(v=>re.test(v.lang||''));
     if(pool.length) return pool.find(v=>v.localService)||pool[0];
   }
@@ -5012,6 +5018,12 @@ function bootShow(manual){
   bootManual=!!manual;
   document.getElementById('bootInner').innerHTML=bootLines();
   if(!briefVoice) briefVoice=briefPickVoice();
+  // Name the voice that actually won. Which voices iOS exposes to web
+  // content is neither documented nor guessable, so the briefing says it
+  // outright rather than leaving it to be inferred from the accent.
+  const skip=document.getElementById('bootSkip');
+  if(skip) skip.textContent='Tap to dismiss'+
+    (speechOK()?' · voice: '+((briefVoice&&briefVoice.name)||'system default'):'');
   el.hidden=false;
   document.body.style.overflow='hidden';
   // The last line finishes arriving at ~1.5s, so this is dwell time on a
