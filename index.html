@@ -858,6 +858,13 @@
   .boot-next span { color:var(--muted); }
   .boot-skip { font-family:var(--mono); font-size:9.5px; letter-spacing:.18em;
     text-transform:uppercase; color:var(--faint); }
+  .boot-speak { align-self:flex-start; margin-top:6px; font-family:var(--mono);
+    font-size:11.5px; letter-spacing:.14em; text-transform:uppercase; font-weight:700;
+    min-height:44px; padding:0 18px; border:1px solid rgba(95,216,245,.5);
+    background:var(--frost-soft); color:var(--frost); border-radius:0;
+    clip-path:polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+  .boot-speak.on { background:rgba(79,230,176,.16); border-color:rgba(79,230,176,.5);
+    color:var(--moss); }
   @media (prefers-reduced-motion: reduce){
     .boot-line, .boot-rule { animation:none; opacity:1; transform:none; }
     .boot.out { animation:none; display:none; }
@@ -4811,6 +4818,97 @@ function exportEverything(){
    Its "seen" stamp lives in its own storage key rather than in the app
    state, deliberately — it is per-device view state, not data the user
    owns, and it has no business in the backup export. */
+/* ---------- SPOKEN BRIEFING ----------
+   speechSynthesis is a built-in browser API: no library, no fetch, works
+   offline — the only speech option that satisfies the one-file rule.
+
+   iOS Safari imposes two constraints this is built around:
+     - speak() must be reached synchronously from a user gesture, so the
+       button calls it directly and never awaits anything first;
+     - getVoices() is usually empty on first call and only fills after a
+       'voiceschanged' event, so a voice is never required — the platform
+       default is perfectly good, and a better one is adopted if it turns
+       up later. */
+const speechOK=()=>'speechSynthesis' in window && typeof SpeechSynthesisUtterance!=='undefined';
+let briefVoice=null;
+function briefPickVoice(){
+  let vs=[]; try{ vs=speechSynthesis.getVoices()||[]; }catch(e){ return null; }
+  if(!vs.length) return null;
+  // A local voice avoids a network round-trip on platforms that stream them.
+  const en=vs.filter(v=>/^en/i.test(v.lang||''));
+  return en.find(v=>v.localService)||en[0]||null;
+}
+if(speechOK()){
+  briefVoice=briefPickVoice();
+  try{ speechSynthesis.addEventListener('voiceschanged',()=>{ briefVoice=briefPickVoice(); }); }catch(e){}
+}
+
+// hm() renders "2 h 10 min", which a synthesiser reads as "two h ten min".
+const spokenHM=x=>{
+  let h=Math.floor(x), m=Math.round((x-h)*60);
+  if(m===60){ h++; m=0; }
+  const p=[];
+  if(h) p.push(h+(h===1?' hour':' hours'));
+  if(m) p.push(m+(m===1?' minute':' minutes'));
+  return p.length?p.join(' and '):'less than a minute';
+};
+// "07:05" spoken as-is can come out "zero seven zero five".
+const spokenTime=t=>{ const [h,m]=t.split(':').map(Number);
+  return m===0 ? h+" o'clock" : h+':'+pad(m); };
+
+function briefingSpeech(){
+  const now=new Date(), hr=now.getHours();
+  const {total,done,pct}=arcCompletionPct();
+  const st=eatingState(now);
+  const nx=arcNextUp();
+  const hello=hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
+  const parts=[hello+'. Zeus online.'];
+  parts.push(total
+    ? `You are ${pct} percent through the day. ${done} of ${total} complete.`
+    : 'Nothing scheduled today.');
+  parts.push(st.mode==='eating'
+    ? `Eating window is open, ${spokenHM(st.left)} remaining.`
+    : `Fasting for another ${spokenHM(st.left)}.`);
+  parts.push(nx ? `Next up at ${spokenTime(nx.time)}, ${nx.name}.`
+                : 'Nothing further scheduled today.');
+  return parts.join(' ');
+}
+
+let briefSpeaking=false;
+function briefSetSpeaking(on){
+  briefSpeaking=on;
+  const b=document.getElementById('bootSpeak');
+  if(b){ b.classList.toggle('on',on); b.textContent=on?'◼ Stop':'▶ Brief me'; }
+  // While it is talking the overlay stays put; once it finishes, let the
+  // normal dismissal resume rather than stranding the briefing on screen.
+  if(!on && document.getElementById('boot') && !document.getElementById('boot').hidden){
+    clearTimeout(bootTimer);
+    bootTimer=setTimeout(bootDismiss,1600);
+  }
+}
+function briefSpeak(e){
+  if(e) e.stopPropagation();            // the whole overlay is a dismiss target
+  if(!speechOK()) return;
+  if(briefSpeaking){ briefStop(); return; }
+  // Holding the overlay open is the point of pressing this.
+  clearTimeout(bootTimer);
+  try{
+    speechSynthesis.cancel();           // iOS wedges if an old utterance is pending
+    const u=new SpeechSynthesisUtterance(briefingSpeech());
+    const v=briefVoice||briefPickVoice();
+    if(v){ u.voice=v; u.lang=v.lang||'en-GB'; } else { u.lang='en-GB'; }
+    u.rate=1; u.pitch=1;
+    u.onend=()=>briefSetSpeaking(false);
+    u.onerror=()=>briefSetSpeaking(false);
+    briefSetSpeaking(true);
+    speechSynthesis.speak(u);
+  }catch(err){ briefSetSpeaking(false); }
+}
+function briefStop(){
+  try{ speechSynthesis.cancel(); }catch(e){}
+  briefSetSpeaking(false);
+}
+
 const BOOT_KEY='zeus.briefing.lastSeen';
 const bootReduced=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -4835,6 +4933,10 @@ function bootLines(){
          <span>${esc(nx.name)}</span></div>`
     : `<div class="boot-line boot-next" style="animation-delay:1.10s">
          <span>Nothing further scheduled today</span></div>`);
+  // Only offered where the platform can actually speak.
+  if(speechOK()) out.push(
+    `<button class="boot-speak boot-line" id="bootSpeak" style="animation-delay:1.30s"
+       onclick="briefSpeak(event)">▶ Brief me</button>`);
   return out.join('');
 }
 
@@ -4852,6 +4954,11 @@ function bootShow(){
 function bootDismiss(){
   const el=document.getElementById('boot');
   if(!el||el.hidden) return;
+  // Dismissing the briefing should silence it too — speech outliving the
+  // panel it belongs to, with no visible way to stop it, is the worst case.
+  // Before clearTimeout, not after: briefStop() re-arms the dismiss timer
+  // on its way out, and that re-armed one is what needs cancelling.
+  if(briefSpeaking) briefStop();
   clearTimeout(bootTimer);
   document.body.style.overflow='';
   // The arc overlay locks body scroll too; do not fight it if it is open.
