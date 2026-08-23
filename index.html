@@ -4827,18 +4827,21 @@ function exportEverything(){
        default is perfectly good, and a better one is adopted if it turns
        up later. */
 const speechOK=()=>'speechSynthesis' in window && typeof SpeechSynthesisUtterance!=='undefined';
-/* Moira, an Irish female voice, chosen by ear. The MCU's female assistant is
-   FRIDAY (Kerry Condon, Irish), which is the register this is after — and
-   Moira beat the British male options in a side-by-side.
+/* Alex, chosen on the device. Apple ships no Southern-US voice, so a
+   McConaughey impression is not on the table — Alex is simply the deepest,
+   most natural American male Apple has, and the slowed rate below does more
+   for the drawl than any name choice could.
 
-   Still a list rather than a single name, because a device without Moira
-   must land somewhere sensible instead of on whatever getVoices() happens
-   to return first: Órla is the other Irish female, then Irish/British
-   fallbacks. Matching by name rather than filtering by language is
-   deliberate — SpeechSynthesisVoice exposes no gender field, so a plain
-   en-GB filter is a coin toss between Martha and Daniel. */
-const VOICE_PREFS=['moira','órla','orla','siobhán','siobhan','serena','martha',
-                   'google uk english female','arthur','daniel'];
+   Note this list OVERRIDES the phone's own default voice: setting Alex in
+   iOS Settings alone would not reach the app, because a named match here
+   wins. Kept as a list so a device without Alex still lands somewhere
+   deliberate — Nathan and Evan are the newer iOS American males, then the
+   Irish/British voices from the earlier FRIDAY direction. Matching by name
+   rather than filtering by language is deliberate: SpeechSynthesisVoice
+   exposes no gender field, so a plain en-US filter is a coin toss between
+   Samantha and Alex. */
+const VOICE_PREFS=['alex','nathan','evan','aaron','moira','órla','orla',
+                   'google us english','arthur','daniel'];
 const englishVoices=()=>{
   try{ return (speechSynthesis.getVoices()||[]).filter(v=>/^en/i.test(v.lang||'')); }
   catch(e){ return []; }
@@ -4853,12 +4856,11 @@ function briefPickVoice(){
     // better, so prefer a local match — those are the downloaded ones.
     if(matches.length) return matches.find(v=>v.localService)||matches[0];
   }
-  // Two passes, not one regex with reordered alternation: alternation order
-  // inside a filter predicate has no effect on which voices match or on the
-  // order of the result, so "Irish first" has to be an actual first pass.
-  // Otherwise a device with a local en-GB voice and a remote en-IE one still
-  // yields the British voice, which is the opposite of the intent.
-  for(const re of [/^en[-_]IE/i, /^en[-_]GB/i]){
+  // Separate passes, not one regex with alternation: alternation order
+  // inside a filter predicate affects neither which voices match nor the
+  // order of the result, so a locale preference has to be an actual
+  // sequence of passes. American first now, to match the named list.
+  for(const re of [/^en[-_]US/i, /^en[-_]IE/i, /^en[-_]GB/i]){
     const pool=vs.filter(v=>re.test(v.lang||''));
     if(pool.length) return pool.find(v=>v.localService)||pool[0];
   }
@@ -4947,7 +4949,7 @@ function briefSpeak(e){
     applyVoice(u);
     // Measured and slightly lowered. Jarvis is never hurried, and the
     // default rate reads as a station announcement rather than an aide.
-    u.rate=0.92; u.pitch=0.9;
+    u.rate=0.82; u.pitch=0.85;
     u.onend=()=>briefSetSpeaking(false);
     u.onerror=()=>briefSetSpeaking(false);
     briefSetSpeaking(true);
