@@ -865,6 +865,16 @@
     clip-path:polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
   .boot-speak.on { background:rgba(79,230,176,.16); border-color:rgba(79,230,176,.5);
     color:var(--moss); }
+  .boot-voice { display:flex; align-items:center; gap:8px; margin-top:4px; width:100%; }
+  .boot-voice[hidden] { display:none; }
+  .boot-voice label { font-family:var(--mono); font-size:9.5px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--faint); flex-shrink:0; }
+  .boot-voice select { flex:1; min-width:0; background:var(--surface); color:var(--ink);
+    border:1px solid var(--line); border-radius:0; padding:9px 8px;
+    font-family:var(--mono); font-size:12px; }
+  .boot-test { flex-shrink:0; font-family:var(--mono); font-size:10px; letter-spacing:.12em;
+    text-transform:uppercase; font-weight:700; padding:9px 12px; border:1px solid var(--line);
+    background:var(--bg); color:var(--frost); border-radius:0; }
   @media (prefers-reduced-motion: reduce){
     .boot-line, .boot-rule { animation:none; opacity:1; transform:none; }
     .boot.out { animation:none; display:none; }
@@ -4839,29 +4849,88 @@ const speechOK=()=>'speechSynthesis' in window && typeof SpeechSynthesisUtteranc
    SpeechSynthesisVoice exposes no gender field (it is not in the spec), so
    matching by name is the only reliable way to avoid landing on a female
    voice — hence a name list rather than a filter. */
-const JARVIS_VOICES=['daniel','arthur','malcolm','oliver','google uk english male'];
+/* Default preference order. Irish female first: the MCU's female assistant
+   is FRIDAY (Kerry Condon, Irish), and it simply sounds better here than the
+   British male options — Órla is the newer iOS voice, Moira the long-standing
+   one. Daniel and Arthur stay on the list as the JARVIS-proper fallbacks.
+   Matching by name rather than filtering by language is deliberate:
+   SpeechSynthesisVoice exposes no gender field, so a plain en-GB filter is a
+   coin toss between Martha and Daniel. */
+const VOICE_PREFS=['órla','orla','moira','siobhán','siobhan','arthur','daniel','malcolm',
+                   'serena','google uk english'];
+// The chosen voice is per-device taste, not user data — its own key, kept
+// out of the backup export for the same reason the briefing stamp is.
+const VOICE_KEY='zeus.briefing.voice';
+const englishVoices=()=>{
+  try{ return (speechSynthesis.getVoices()||[]).filter(v=>/^en/i.test(v.lang||'')); }
+  catch(e){ return []; }
+};
 let briefVoice=null;
 function briefPickVoice(){
-  let vs=[]; try{ vs=speechSynthesis.getVoices()||[]; }catch(e){ return null; }
+  const vs=englishVoices();
   if(!vs.length) return null;
-  const named=n=>vs.find(v=>(v.name||'').toLowerCase().includes(n));
-  for(const n of JARVIS_VOICES){
-    const v=named(n);
-    // Enhanced/Premium variants share the base name and sound far better,
-    // so prefer whichever match is local — those are the downloaded ones.
-    if(v){
-      const better=vs.filter(x=>(x.name||'').toLowerCase().includes(n));
-      return better.find(x=>x.localService)||v;
-    }
+  // An explicit choice always wins over the preference list.
+  let saved=null; try{ saved=localStorage.getItem(VOICE_KEY); }catch(e){}
+  if(saved){ const hit=vs.find(v=>v.name===saved); if(hit) return hit; }
+  for(const n of VOICE_PREFS){
+    const matches=vs.filter(v=>(v.name||'').toLowerCase().includes(n));
+    // Enhanced/Premium variants share the base name and sound markedly
+    // better, so prefer a local match — those are the downloaded ones.
+    if(matches.length) return matches.find(v=>v.localService)||matches[0];
   }
-  const gb=vs.filter(v=>/^en[-_]GB/i.test(v.lang||''));
+  const gb=vs.filter(v=>/^en[-_](GB|IE)/i.test(v.lang||''));
   if(gb.length) return gb.find(v=>v.localService)||gb[0];
-  const en=vs.filter(v=>/^en/i.test(v.lang||''));
-  return en.find(v=>v.localService)||en[0]||null;
+  return vs.find(v=>v.localService)||vs[0];
+}
+
+/* The voice picker exists because the alternative is guessing: the voice
+   list differs per device and per installed language pack, and no amount of
+   name-matching substitutes for hearing them. */
+function briefVoiceOptions(){
+  const vs=englishVoices();
+  if(!vs.length) return '';
+  const cur=(briefVoice&&briefVoice.name)||'';
+  const label=v=>v.name+' · '+(v.lang||'').replace('_','-');
+  return vs.map(v=>`<option value="${esc(v.name)}"${v.name===cur?' selected':''}>${esc(label(v))}</option>`).join('');
+}
+function briefRenderVoicePicker(){
+  const sel=document.getElementById('bootVoice'); if(!sel) return;
+  const opts=briefVoiceOptions();
+  const wrap=document.getElementById('bootVoiceWrap');
+  // getVoices() is empty until 'voiceschanged' on most platforms, so the
+  // row stays hidden rather than showing an empty dropdown.
+  if(wrap) wrap.hidden=!opts;
+  if(opts) sel.innerHTML=opts;
+}
+function briefSetVoice(e){
+  if(e) e.stopPropagation();
+  const sel=document.getElementById('bootVoice'); if(!sel) return;
+  try{ localStorage.setItem(VOICE_KEY,sel.value); }catch(err){}
+  briefVoice=englishVoices().find(v=>v.name===sel.value)||briefVoice;
+  clearTimeout(bootTimer);              // auditioning should not race the dismiss
+  briefSample(e);
+}
+// A short line rather than the whole briefing — auditioning ten voices
+// through four sentences each is nobody's idea of a good time.
+function briefSample(e){
+  if(e) e.stopPropagation();
+  if(!speechOK()) return;
+  clearTimeout(bootTimer);
+  try{
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance('All systems online, sir.');
+    applyVoice(u);
+    u.rate=0.92; u.pitch=0.9;
+    speechSynthesis.speak(u);
+  }catch(err){}
 }
 if(speechOK()){
   briefVoice=briefPickVoice();
-  try{ speechSynthesis.addEventListener('voiceschanged',()=>{ briefVoice=briefPickVoice(); }); }catch(e){}
+  // Voices usually arrive after first paint, so re-resolve and refill the
+  // picker when they do rather than leaving it empty.
+  try{ speechSynthesis.addEventListener('voiceschanged',()=>{
+    briefVoice=briefPickVoice(); briefRenderVoicePicker();
+  }); }catch(e){}
 }
 
 // hm() renders "2 h 10 min", which a synthesiser reads as "two h ten min".
@@ -4876,6 +4945,15 @@ const spokenHM=x=>{
 // "07:05" spoken as-is can come out "zero seven zero five".
 const spokenTime=t=>{ const [h,m]=t.split(':').map(Number);
   return m===0 ? h+" o'clock" : h+':'+pad(m); };
+
+/* Shared by the briefing and the audition. Kept separate from the caller's
+   try so a rejected voice costs the accent, not the whole utterance. */
+function applyVoice(u){
+  const v=briefVoice||briefPickVoice();
+  u.lang=(v&&v.lang)||'en-GB';
+  if(!v) return;
+  try{ u.voice=v; }catch(e){ /* platform default it is */ }
+}
 
 /* Jarvis's register: formal, dry, addresses you as sir — once at the open
    and once at the close, since every sentence would be parody. Punctuation
@@ -4921,8 +4999,11 @@ function briefSpeak(e){
   try{
     speechSynthesis.cancel();           // iOS wedges if an old utterance is pending
     const u=new SpeechSynthesisUtterance(briefingSpeech());
-    const v=briefVoice||briefPickVoice();
-    if(v){ u.voice=v; u.lang=v.lang||'en-GB'; } else { u.lang='en-GB'; }
+    // Voice assignment in its own try: the setter rejects anything that is
+    // not a real SpeechSynthesisVoice, and a stale entry from a
+    // 'voiceschanged' race should degrade to the platform default rather
+    // than swallow the whole utterance and leave it silent.
+    applyVoice(u);
     // Measured and slightly lowered. Jarvis is never hurried, and the
     // default rate reads as a station announcement rather than an aide.
     u.rate=0.92; u.pitch=0.9;
@@ -4964,7 +5045,13 @@ function bootLines(){
   // Only offered where the platform can actually speak.
   if(speechOK()) out.push(
     `<button class="boot-speak boot-line" id="bootSpeak" style="animation-delay:1.30s"
-       onclick="briefSpeak(event)">▶ Brief me</button>`);
+       onclick="briefSpeak(event)">▶ Brief me</button>
+     <div class="boot-voice boot-line" id="bootVoiceWrap" style="animation-delay:1.45s" hidden
+          onclick="event.stopPropagation()">
+       <label for="bootVoice">Voice</label>
+       <select id="bootVoice" onchange="briefSetVoice(event)"></select>
+       <button class="boot-test" onclick="briefSample(event)" aria-label="Test voice">Test</button>
+     </div>`);
   return out.join('');
 }
 
@@ -4972,6 +5059,8 @@ let bootTimer=null;
 function bootShow(){
   const el=document.getElementById('boot'); if(!el) return;
   document.getElementById('bootInner').innerHTML=bootLines();
+  if(!briefVoice) briefVoice=briefPickVoice();
+  briefRenderVoicePicker();
   el.hidden=false;
   document.body.style.overflow='hidden';
   // The last line finishes arriving at ~1.5s, so this is dwell time on a
