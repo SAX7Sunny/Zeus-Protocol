@@ -4844,8 +4844,10 @@ function bootShow(){
   document.getElementById('bootInner').innerHTML=bootLines();
   el.hidden=false;
   document.body.style.overflow='hidden';
-  // Long enough to read the last line, which finishes arriving at ~1.5s.
-  bootTimer=setTimeout(bootDismiss, bootReduced()?2200:3400);
+  // The last line finishes arriving at ~1.5s, so this is dwell time on a
+  // fully-formed briefing, not time spent waiting for it to assemble.
+  // A tap still dismisses instantly, so erring long costs nothing.
+  bootTimer=setTimeout(bootDismiss, bootReduced()?3600:5600);
 }
 function bootDismiss(){
   const el=document.getElementById('boot');
