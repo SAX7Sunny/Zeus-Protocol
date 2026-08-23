@@ -14,9 +14,13 @@ starting anything in that direction.
 
 **One file, no build step.** Everything lives in `index.html` — markup, CSS,
 JavaScript. No bundler, no npm dependencies, no separate `.js` or `.css`.
-The only permitted runtime fetch is pdf.js from cdnjs, loaded lazily and only
-when a PDF is opened. If a change seems to need a library, say so instead of
-adding one.
+The only permitted runtime fetches are pdf.js (cdnjs) and Tesseract.js
+(jsDelivr), each loaded lazily and only when actually needed — pdf.js when a
+PDF is opened, Tesseract.js only as a fallback when that PDF's text layer
+comes back (almost) empty, i.e. it's a scan. Tesseract.js runs OCR entirely
+in-browser via WASM, so biomarker data still never leaves the device — see
+Privacy below. If a change seems to need a library beyond these two, say so
+instead of adding one.
 
 **Colours come from CSS variables only.** `var(--bg)`, `--surface`, `--ink`,
 `--muted`, `--faint`, `--line`, `--frost`, `--moss`, `--clay`, `--amber`,
@@ -71,11 +75,37 @@ table or policy definitions elsewhere, including in `ROADMAP.md`. Re-run
 
 ---
 
+## Bio panel PDF import
+
+`handlePdf()` is the entry point (file input onchange). It first tries
+`pdfToLines()` — pdf.js text extraction — through `parseLines()`, the generic
+Austrian-lab-report parser that anchors each value on its unit token (see the
+comment above `UNIT_RE`; label rows like `Alpha-Globulin 1` or `CA 19-9` lose
+their trailing digit to a naive "first number" approach).
+
+If that comes back with zero parsed values — almost always because the PDF is
+a scan with no text layer — `handlePdf()` falls back to `pdfToLinesOCR()`:
+each page is rendered to a canvas via pdf.js, then read with Tesseract.js
+(`deu+eng`, since Austrian labs report in German) through the same
+`parseLines()` path. This is materially slower (seconds per page, plus a
+one-time download of the OCR engine and language data on first use), so
+`bioMsg` is updated per page rather than left on a single "Reading…" message.
+Only when OCR *also* finds nothing does the user see the final "no values
+found" message.
+
+Both paths converge on `parseLines()` — do not duplicate its logic for the
+OCR path; feed it the same line format (`pdfToLinesOCR` already runs OCR
+output through `normaliseLine`, same as the pdf.js path).
+
+---
+
 ## Privacy
 
 Biomarker panels are health data and stay on the device. They are never sent
 anywhere, and must not be added to any sync payload without an explicit
-decision recorded in `ROADMAP.md`.
+decision recorded in `ROADMAP.md`. This includes the OCR fallback above:
+Tesseract.js processes pages locally in the browser via WASM — no page image
+or extracted text is ever posted to a server.
 
 Calendar feed URLs are secrets — anyone holding one can read the calendar
 without authentication. They live in local storage only. Never commit one,

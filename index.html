@@ -1740,10 +1740,10 @@ const MARKERS=[
  {k:'zn',    n:'Zinc',            u:'µg/dL', lo:70,   hi:120,  re:/\bzink\b|\bzinc\b/i},
 ];
 
-function injectScript(src){
+function injectScript(src,errMsg){
   return new Promise((res,rej)=>{
     const el=document.createElement('script');
-    el.src=src; el.onload=()=>res(); el.onerror=()=>rej(new Error('Could not load the PDF reader. Check your connection.'));
+    el.src=src; el.onload=()=>res(); el.onerror=()=>rej(new Error(errMsg||'Could not load the PDF reader. Check your connection.'));
     document.head.appendChild(el);
   });
 }
@@ -1752,6 +1752,47 @@ async function ensurePdfJs(){
   const base='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
   await injectScript(base+'pdf.min.js');
   window.pdfjsLib.GlobalWorkerOptions.workerSrc=base+'pdf.worker.min.js';
+}
+
+// OCR fallback for scanned PDFs with no text layer. Loaded lazily, same as
+// pdf.js above, and only when a PDF's text layer comes back (almost) empty —
+// most uploads never touch this. Runs entirely in-browser via WASM, so
+// biomarker data never leaves the device (see Privacy in CLAUDE.md).
+async function ensureTesseract(){
+  if(window.Tesseract) return;
+  await injectScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
+    'Could not load the OCR reader. Check your connection.');
+}
+
+// Render each PDF page to a canvas with pdf.js, then OCR that image with
+// Tesseract (German + English — Austrian labs report in German). Slower
+// than pdfToLines by a wide margin (seconds per page), so callers should
+// only reach for this once plain text extraction has come back empty, and
+// should show onProgress to the user rather than leave bioMsg stale.
+async function pdfToLinesOCR(file,onProgress){
+  await ensurePdfJs();
+  await ensureTesseract();
+  const buf=await file.arrayBuffer();
+  const pdf=await window.pdfjsLib.getDocument({data:buf}).promise;
+  const worker=await window.Tesseract.createWorker('deu+eng');
+  const lines=[];
+  try{
+    for(let p=1;p<=pdf.numPages;p++){
+      if(onProgress) onProgress(p,pdf.numPages);
+      const page=await pdf.getPage(p);
+      // scale 2 ≈ 150dpi off a typical A4 scan — enough for tesseract to
+      // read report-size type without ballooning recognise time.
+      const viewport=page.getViewport({scale:2});
+      const canvas=document.createElement('canvas');
+      canvas.width=viewport.width; canvas.height=viewport.height;
+      await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+      const {data:{text}}=await worker.recognize(canvas);
+      text.split('\n').forEach(l=>{ l=normaliseLine(l); if(l) lines.push(l); });
+    }
+  } finally {
+    await worker.terminate();
+  }
+  return lines;
 }
 
 // Rebuild visual lines from pdf.js text items using their y position.
@@ -1903,10 +1944,17 @@ function panelDate(filename,lines){
 async function handlePdf(file){
   bioBusy=true; bioMsg='Reading '+file.name+' …'; render();
   try{
-    const lines=await pdfToLines(file);
+    let lines=await pdfToLines(file);
+    let values=parseLines(lines);
+    if(!values.length){
+      // No usable text layer — most likely a scan. Fall back to OCR instead
+      // of failing outright; this is the slow path, so keep bioMsg moving.
+      bioMsg='No text layer — reading '+file.name+' with OCR (this can take a bit) …'; render();
+      lines=await pdfToLinesOCR(file,(p,n)=>{ bioMsg='OCR: page '+p+'/'+n+' of '+file.name+' …'; render(); });
+      values=parseLines(lines);
+    }
     const date=panelDate(file.name,lines)||key(new Date());
-    const values=parseLines(lines);
-    if(!values.length){ bioBusy=false; bioMsg='No values found in that PDF. It may be a scan without a text layer.'; return render(); }
+    if(!values.length){ bioBusy=false; bioMsg='No values found in that PDF, even with OCR. It may be an unreadable scan.'; return render(); }
     values.forEach(v=>{ const mk=MARKERS.find(m=>m.re.test(v.label)); v.displayName=mk?mk.n:v.label; });
     PANELS.push({id:'p'+Date.now(), date, name:file.name, label:'', values,
       createdAt:new Date().toISOString()});
