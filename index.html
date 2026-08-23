@@ -4987,7 +4987,20 @@ const speechOK=()=>'speechSynthesis' in window && typeof SpeechSynthesisUtteranc
    filtering by language stays deliberate: SpeechSynthesisVoice exposes no
    gender field, so a plain en-US filter is a coin toss between Samantha
    and Alex. */
-const VOICE_PREFS=['alex','aaron','evan','nathan','tom','google us english'];
+const VOICE_PREFS=['alex','aaron','evan','nathan','tom'];
+/* SpeechSynthesisVoice carries no gender field — it is not in the spec — so
+   the only way to avoid landing on a female voice is to know the names.
+   Without this the fallback picked Samantha, the default en-US voice: the
+   Irish voice was gone but the result was still female, which is not what
+   "switch to Alex" meant. Names cover Apple's iOS/macOS set plus Chrome. */
+const MALE_NAMES=['alex','aaron','evan','nathan','tom','daniel','arthur','malcolm',
+  'oliver','gordon','lee','rishi','fred','ralph','albert','junior','reed','rocko',
+  'eddy','grandpa','google uk english male'];
+const FEMALE_NAMES=['samantha','karen','moira','órla','orla','tessa','fiona','serena',
+  'martha','nicky','susan','allison','ava','zoe','noelle','kate','catherine','siobhán',
+  'siobhan','flo','sandy','shelley','grandma','kathy','veena','amelie',
+  'google uk english female','google us english'];
+const nameIn=(v,list)=>list.some(n=>(v.name||'').toLowerCase().includes(n));
 const englishVoices=()=>{
   try{ return (speechSynthesis.getVoices()||[]).filter(v=>/^en/i.test(v.lang||'')); }
   catch(e){ return []; }
@@ -5002,14 +5015,20 @@ function briefPickVoice(){
     // better, so prefer a local match — those are the downloaded ones.
     if(matches.length) return matches.find(v=>v.localService)||matches[0];
   }
-  // Separate passes, not one regex with alternation: alternation order
-  // inside a filter predicate affects neither which voices match nor the
-  // order of the result, so a locale preference has to be an actual
-  // sequence of passes. American first now, to match the named list.
-  for(const re of [/^en[-_]US/i, /^en[-_]GB/i, /^en[-_]IE/i]){
-    const pool=vs.filter(v=>re.test(v.lang||''));
+  // Named preferences missed — most likely because iOS did not expose Alex
+  // to web content. Fall back to ANY known male voice before considering
+  // locale, since the wrong gender is more jarring than the wrong accent.
+  // Separate passes, not one regex with alternation: alternation order in a
+  // filter predicate affects neither which voices match nor their order.
+  const males=vs.filter(v=>nameIn(v,MALE_NAMES));
+  for(const re of [/^en[-_]US/i, /^en[-_]GB/i, /./]){
+    const pool=males.filter(v=>re.test(v.lang||''));
     if(pool.length) return pool.find(v=>v.localService)||pool[0];
   }
+  // No recognisable male voice at all: take anything not known to be
+  // female before resorting to the first entry.
+  const neutral=vs.filter(v=>!nameIn(v,FEMALE_NAMES));
+  if(neutral.length) return neutral.find(v=>v.localService)||neutral[0];
   return vs.find(v=>v.localService)||vs[0];
 }
 if(speechOK()){
@@ -5095,10 +5114,8 @@ function briefSpeak(e){
     applyVoice(u);
     // Measured and slightly lowered. Jarvis is never hurried, and the
     // default rate reads as a station announcement rather than an aide.
-    // rate 1 is the voice's natural pace. 0.82 was tuned for a drawl and
-    // read as sluggish in use; the lowered pitch alone carries enough of
-    // the character. One number to nudge if it ever needs re-tuning.
-    u.rate=1; u.pitch=0.85;
+    // Above the voice's natural pace, on request. One number to nudge.
+    u.rate=1.15; u.pitch=0.85;
     u.onend=()=>briefSetSpeaking(false);
     u.onerror=()=>briefSetSpeaking(false);
     briefSetSpeaking(true);
