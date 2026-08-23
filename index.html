@@ -4987,12 +4987,12 @@ const speechOK=()=>'speechSynthesis' in window && typeof SpeechSynthesisUtteranc
    filtering by language stays deliberate: SpeechSynthesisVoice exposes no
    gender field, so a plain en-US filter is a coin toss between Samantha
    and Alex. */
-const VOICE_PREFS=['alex','aaron','evan','nathan','tom'];
+const VOICE_PREFS=['moira','órla','orla','siobhán','siobhan','serena','martha'];
 /* SpeechSynthesisVoice carries no gender field — it is not in the spec — so
-   the only way to avoid landing on a female voice is to know the names.
-   Without this the fallback picked Samantha, the default en-US voice: the
-   Irish voice was gone but the result was still female, which is not what
-   "switch to Alex" meant. Names cover Apple's iOS/macOS set plus Chrome. */
+   gender can only be steered by knowing the names. The lists stay; only the
+   direction flipped. Alex was tried and rejected by ear, so Moira is back as
+   the target and a female voice is now what the fallback should reach for.
+   Names cover Apple's iOS/macOS set plus Chrome. */
 const MALE_NAMES=['alex','aaron','evan','nathan','tom','daniel','arthur','malcolm',
   'oliver','gordon','lee','rishi','fred','ralph','albert','junior','reed','rocko',
   'eddy','grandpa','google uk english male'];
@@ -5015,19 +5015,19 @@ function briefPickVoice(){
     // better, so prefer a local match — those are the downloaded ones.
     if(matches.length) return matches.find(v=>v.localService)||matches[0];
   }
-  // Named preferences missed — most likely because iOS did not expose Alex
-  // to web content. Fall back to ANY known male voice before considering
-  // locale, since the wrong gender is more jarring than the wrong accent.
+  // Named preferences missed. Reach for ANY known female voice before
+  // considering locale — the wrong gender is more jarring than the wrong
+  // accent, which is the same rule as before, just pointed the other way.
   // Separate passes, not one regex with alternation: alternation order in a
   // filter predicate affects neither which voices match nor their order.
-  const males=vs.filter(v=>nameIn(v,MALE_NAMES));
-  for(const re of [/^en[-_]US/i, /^en[-_]GB/i, /./]){
-    const pool=males.filter(v=>re.test(v.lang||''));
+  const females=vs.filter(v=>nameIn(v,FEMALE_NAMES));
+  for(const re of [/^en[-_]IE/i, /^en[-_]GB/i, /./]){
+    const pool=females.filter(v=>re.test(v.lang||''));
     if(pool.length) return pool.find(v=>v.localService)||pool[0];
   }
-  // No recognisable male voice at all: take anything not known to be
-  // female before resorting to the first entry.
-  const neutral=vs.filter(v=>!nameIn(v,FEMALE_NAMES));
+  // No recognisable female voice at all: take anything not known to be
+  // male before resorting to the first entry.
+  const neutral=vs.filter(v=>!nameIn(v,MALE_NAMES));
   if(neutral.length) return neutral.find(v=>v.localService)||neutral[0];
   return vs.find(v=>v.localService)||vs[0];
 }
@@ -5071,8 +5071,7 @@ function briefingSpeech(){
   const st=eatingState(now);
   const nx=arcNextUp();
   const hello=hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
-  // Spoken only — the on-screen briefing stays sober.
-  const parts=['Alright, alright, alright.', hello+', sir. All systems online.'];
+  const parts=[hello+', sir. All systems online.'];
   parts.push(total
     ? `You are ${pct} percent through the day. ${done} of ${total} complete.`
     : 'Nothing is scheduled today.');
@@ -5114,8 +5113,10 @@ function briefSpeak(e){
     applyVoice(u);
     // Measured and slightly lowered. Jarvis is never hurried, and the
     // default rate reads as a station announcement rather than an aide.
-    // Above the voice's natural pace, on request. One number to nudge.
-    u.rate=1.15; u.pitch=0.85;
+    // Pace kept where it was asked for. Pitch back to 0.9, the value in
+    // place when this voice was judged best — 0.85 was tuned for a deep
+    // male voice and drags a female one down unnaturally.
+    u.rate=1.15; u.pitch=0.9;
     u.onend=()=>briefSetSpeaking(false);
     u.onerror=()=>briefSetSpeaking(false);
     briefSetSpeaking(true);
