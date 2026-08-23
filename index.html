@@ -1062,7 +1062,11 @@
     .rail-empty { font-size:12.5px; color:var(--faint); }
     .rail-sub { font-family:var(--mono); font-size:10px; color:var(--faint);
       padding:0 0 7px; margin-top:-3px; }
-    .rail-row.sub { padding-left:10px; border-left:2px solid var(--amber); }
+    .rail-row.sub { padding-left:10px; border-left:2px solid var(--amber); cursor:pointer; }
+    .rail-row.sub:hover { background:var(--surface); }
+    #railBio { cursor:pointer; }
+    #railBio:hover .rail-go { color:var(--frost); }
+    .rail-go { float:right; letter-spacing:.08em; color:var(--faint); }
     .rail-val { font-family:var(--mono); font-size:11px; color:var(--amber);
       font-variant-numeric:tabular-nums; margin-left:auto; flex-shrink:0; }
     /* The band pill is sized for the Bio tab; tighten it for the rail. */
@@ -1184,7 +1188,8 @@
   <!-- Desktop-only: populated by renderRail(). Stays hidden on mobile via
        the [hidden] attribute — the (min-width:900px) query is the only place
        that turns it back on, so narrowing the window removes it again. -->
-  <div class="rail-section" id="railBio" hidden></div>
+  <div class="rail-section" id="railBio" hidden role="button" tabindex="0"
+       aria-label="Open Bio" onclick="railOpenBio()" onkeydown="railBioKey(event)"></div>
   <div class="rail-section" id="railTasks" hidden></div>
   </aside>
   <div class="tabs-wrap" id="tabsWrap">
@@ -2302,6 +2307,16 @@ window.addEventListener('resize',()=>{ syncHeaderHeight(); renderRail(); arcOnRe
 // Fixed to the actual calendar day, not viewDate — the rail doesn't navigate
 // with the day nav, it's the one thing on screen that always means "today".
 // No-ops on mobile, where #railBio/#railTasks stay behind [hidden].
+/* The rail is a summary; these are its way back to the real thing. */
+function railOpenBio(){ setTab('bio'); }
+function railBioKey(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); railOpenBio(); } }
+function railOpenMarker(e,k){
+  if(e) e.stopPropagation();   // the whole section is also a target
+  setTab('bio');               // render the tab first, then open onto it
+  openMarkerDetail(k);
+}
+function railMarkerKey(e,k){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); railOpenMarker(e,k); } }
+
 function renderRail(){
   if(!isDesktopLayout()) return;
   const today=new Date(); today.setHours(0,0,0,0);
@@ -2332,12 +2347,17 @@ function renderRail(){
       rows.push(`<div class="rail-sub">${days} day${days===1?'':'s'} since panel</div>`);
       // Name the markers that are actually out of range — a count alone
       // still means opening the tab to find out which.
+      // Each carries its own key, so a row opens that marker's history
+      // directly rather than dropping you at the top of the tab to hunt.
       out.slice(0,4).forEach(v=>rows.push(
-        `<div class="rail-row sub"><span class="rail-title">${esc(v.displayName||v.label)}</span>
+        `<div class="rail-row sub" role="button" tabindex="0"
+              onclick="railOpenMarker(event,'${esc(v.key)}')"
+              onkeydown="railMarkerKey(event,'${esc(v.key)}')">
+           <span class="rail-title">${esc(v.displayName||v.label)}</span>
            <span class="rail-val">${esc(String(v.v))}${v.unit?' '+esc(v.unit):''}</span></div>`));
       if(out.length>4) rows.push(`<div class="rail-sub">+${out.length-4} more out of range</div>`);
     }
-    bioBox.innerHTML=`<div class="rail-h">Bio</div>`+
+    bioBox.innerHTML=`<div class="rail-h">Bio<span class="rail-go">Open ›</span></div>`+
       (rows.length?rows.join(''):'<div class="rail-empty">No readings yet.</div>');
   }
   const todayKey=key(today);
