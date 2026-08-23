@@ -192,16 +192,11 @@
   .note strong { color:var(--ink); }
   .note.warn { background:rgba(255,194,71,.12); color:var(--amber); }
 
-  .import-zone { margin:12px 6px 0; padding:22px 18px; border:1.5px dashed rgba(95,216,245,.45);
-    border-radius:14px; text-align:center; background:rgba(95,216,245,.06); }
-  .import-zone h3 { font-family:Georgia,serif; font-size:17px; margin-bottom:5px; }
-  .import-zone p { font-size:12.5px; color:var(--muted); line-height:1.5; margin-bottom:14px; }
   .import-btn { background:var(--frost); color:var(--bg); border:none; padding:12px 22px;
     border-radius:11px; font-size:14.5px; font-weight:700; }
   #fileInput { display:none; }
   .import-status { margin-top:10px; font-size:12.5px; color:var(--moss); font-weight:600; }
 
-  .agenda-time { flex-shrink:0; width:52px; font-size:13px; font-weight:700; color:var(--frost); }
   .day-sep { color:var(--faint); padding:16px 6px 6px; }
 
   /* Undo toast — sits above the floating + button, not under it. */
@@ -320,9 +315,6 @@
   .gcard.cal-collapsed .gtop { margin-bottom:0; }
   .cal-collapsed-meta { font-size:12.5px; color:var(--muted); font-weight:600; }
   .gtop { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
-  .gdot { width:9px; height:9px; border-radius:50%; background:var(--faint); flex-shrink:0; }
-  .gdot.live { background:var(--moss); box-shadow:0 0 0 4px rgba(79,230,176,.18); }
-  .gdot.err { background:var(--rose); }
   .gtitle { font-family:Georgia,serif; font-size:16px; font-weight:600; flex:1; }
   .gsub { font-size:12.5px; color:var(--muted); line-height:1.5; margin-bottom:12px; }
   .gsub b { color:var(--ink); font-weight:600; }
@@ -963,16 +955,16 @@
 
   /* Panels get bracket marks at opposite corners. Cheap, and it reads as
      HUD instantly without touching the panel's own box. */
-  .gcard, .biocard, .import-zone, .upload-zone, .note { position:relative; }
-  .gcard::before, .biocard::before, .import-zone::before, .upload-zone::before, .note::before,
-  .gcard::after,  .biocard::after,  .import-zone::after,  .upload-zone::after,  .note::after {
+  .gcard, .biocard, .upload-zone, .note { position:relative; }
+  .gcard::before, .biocard::before, .upload-zone::before, .note::before,
+  .gcard::after,  .biocard::after,  .upload-zone::after,  .note::after {
     content:''; position:absolute; width:12px; height:12px;
     border:2px solid var(--frost); pointer-events:none; opacity:.55;
   }
-  .gcard::before, .biocard::before, .import-zone::before, .upload-zone::before, .note::before {
+  .gcard::before, .biocard::before, .upload-zone::before, .note::before {
     top:-1px; left:-1px; border-right:0; border-bottom:0;
   }
-  .gcard::after, .biocard::after, .import-zone::after, .upload-zone::after, .note::after {
+  .gcard::after, .biocard::after, .upload-zone::after, .note::after {
     bottom:-1px; right:-1px; border-left:0; border-top:0;
   }
 
@@ -980,7 +972,7 @@
      rather than "flight computer"; this is the most opinionated change in
      the restyle and the cleanest single thing to revert if it lands wrong. */
   .logo, h1, .block-title, .mhead, .day-title, .wk-label, .gtitle,
-  .import-zone h3, .upload-zone h3, .sheet h2, .md-name, .md-val, .td-title {
+  .upload-zone h3, .sheet h2, .md-name, .md-val, .td-title {
     font-family:var(--mono); letter-spacing:-0.01em;
   }
   .logo { color:var(--frost); text-shadow:var(--glow-soft); border-color:rgba(95,216,245,.38); }
@@ -1011,7 +1003,7 @@
   /* Bars and inputs square off to match the bevelled buttons. */
   .progress-track, .eat-track, .field input, .field select, .gid-input,
   .compare-sel, .sheet, .desc-panel, .md-point, .wait-note, .note,
-  .import-zone, .upload-zone, .gcard, .biocard, .dose, .block-time,
+  .upload-zone, .gcard, .biocard, .dose, .block-time,
   .streak-pill, .beta-pill, .undo-toast { border-radius:0; }
 
   /* ============ Desktop (>=900px): three-column shell ============
@@ -1937,11 +1929,16 @@ function eatingState(now){
   const done=h>=EAT_END ? h-EAT_END : (24-EAT_END)+h; // schon gefastet
   return {mode:'fasting', left:total-done, pct:done/total*100};
 }
-const hm=x=>{
-  let h=Math.floor(x), m=Math.round((x-h)*60);
-  if(m===60){ h++; m=0; }
-  return h>0 ? h+' h '+m+' min' : m+' min';
-};
+// Decimal hours -> whole hours and minutes. Shared so the on-screen and
+// spoken renderings can never disagree about the rounding.
+const splitHM=x=>{ let h=Math.floor(x), m=Math.round((x-h)*60);
+  if(m===60){ h++; m=0; } return {h,m}; };
+// 'YYYY-MM-DD' through new Date() is parsed as UTC midnight, which lands on
+// the previous local day at negative offsets. Every date string in this app
+// means a local calendar day, so it is split by hand.
+const parseDay=str=>{ const [y,m,d]=String(str).split('-').map(Number);
+  return new Date(y,(m||1)-1,d||1); };
+const hm=x=>{ const {h,m}=splitHM(x); return h>0 ? h+' h '+m+' min' : m+' min'; };
 function renderEatWindow(){
   const head=document.getElementById('eatHead'), track=document.getElementById('eatTrack');
   const wrap=document.getElementById('progWrap');
@@ -2164,7 +2161,6 @@ function occursOn(ev,day){
 const allEventSources=()=>IMPORTED.concat(SUBS.flatMap(s=>s.events));
 const eventsOn=d=>allEventSources().filter(e=>occursOn(e,d))
   .sort((a,b)=>(a.allDay?-1:0)-(b.allDay?-1:0)||hhmm(a.start).localeCompare(hhmm(b.start)));
-const eventsOnDay=()=>eventsOn(viewDate);
 
 /* merged agenda for a given day */
 function agendaOn(d){
@@ -2244,6 +2240,10 @@ function syncTabFade(){
 function setTab(t){
   if(t==='cal' && calMode==='day') calMode='week';   // tapping Calendar out of day view goes to the default week view, like Back
   activeTab=t; activeFilter='all';
+  // Transient status text belongs to the form that produced it. Without
+  // this, a blood-pressure validation error or a PDF import result stayed
+  // on screen after navigating away and back.
+  bpMsg=''; bioMsg='';
   ['agenda','routine','supps','tasks','cal','bio'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===t));
   document.getElementById('pageTitle').textContent =
     t==='agenda'?'Agenda':t==='routine'?'Daily Routine':t==='supps'?'Supplements':
@@ -3054,8 +3054,7 @@ const visibleTasks=()=>TASKS.filter(t=>!t.done || t.doneAt===key(new Date()));
 
 function taskDateLabel(t){
   if(!t.date) return '';
-  const [y,m,d]=t.date.split('-').map(Number);
-  const dt=new Date(y,m-1,d); dt.setHours(0,0,0,0);
+  const dt=parseDay(t.date);
   const today=new Date(); today.setHours(0,0,0,0);
   const diff=Math.round((dt-today)/86400000);
   const base = diff===0?'Today' : diff===1?'Tomorrow'
@@ -3193,7 +3192,7 @@ function systemsReport(){
   // Days since the newest panel. PANELS is date-sorted, so the last is newest.
   if(PANELS.length){
     const last=PANELS[PANELS.length-1];
-    const days=Math.floor((dayStart(new Date())-dayStart(new Date(last.date)))/86400000);
+    const days=Math.floor((dayStart(new Date())-dayStart(parseDay(last.date)))/86400000);
     out.push({key:'bio', label:'Biomarkers',
       detail:days+' day'+(days===1?'':'s')+' since panel',
       state: days>240?'warn' : days>180?'watch' : 'ok'});
@@ -3489,8 +3488,7 @@ function subCardHTML(){
 
 function refreshDots(){
   document.querySelectorAll('[data-day]').forEach(b=>{
-    const [y,m,d]=b.dataset.day.split('-').map(Number);
-    const f=dayFlags(new Date(y,m-1,d));
+    const f=dayFlags(parseDay(b.dataset.day));
     const el=b.querySelector('.dots'); if(el) el.innerHTML=dotsHTML(f);
   });
 }
@@ -3499,8 +3497,7 @@ function bindDayCells(root){
   root.querySelectorAll('[data-day]:not([data-bound])').forEach(b=>{
     b.dataset.bound='1';
     b.onclick=()=>{
-      const [y,m,d]=b.dataset.day.split('-').map(Number);
-      viewDate=new Date(y,m-1,d); viewDate.setHours(0,0,0,0);
+      viewDate=parseDay(b.dataset.day);
       calReturnMode=calMode;
       calMode='day';
       render();
@@ -4830,15 +4827,6 @@ function exportEverything(){
        default is perfectly good, and a better one is adopted if it turns
        up later. */
 const speechOK=()=>'speechSynthesis' in window && typeof SpeechSynthesisUtterance!=='undefined';
-/* Voice selection, in descending order of how much it sounds like Jarvis.
-   The real thing is Paul Bettany, which would need a cloned voice served
-   over a network — impossible inside the one-file rule. The closest
-   available is a British male system voice: Daniel is Apple's canonical
-   en-GB male and present on both iOS and macOS, Arthur and Malcolm are
-   newer Apple additions, the Google name covers Chrome and Android.
-   SpeechSynthesisVoice exposes no gender field (it is not in the spec), so
-   matching by name is the only reliable way to avoid landing on a female
-   voice — hence a name list rather than a filter. */
 /* Moira, an Irish female voice, chosen by ear. The MCU's female assistant is
    FRIDAY (Kerry Condon, Irish), which is the register this is after — and
    Moira beat the British male options in a side-by-side.
@@ -4849,7 +4837,8 @@ const speechOK=()=>'speechSynthesis' in window && typeof SpeechSynthesisUtteranc
    fallbacks. Matching by name rather than filtering by language is
    deliberate — SpeechSynthesisVoice exposes no gender field, so a plain
    en-GB filter is a coin toss between Martha and Daniel. */
-const VOICE_PREFS=['moira','órla','orla','siobhán','siobhan','serena','martha','arthur','daniel'];
+const VOICE_PREFS=['moira','órla','orla','siobhán','siobhan','serena','martha',
+                   'google uk english female','arthur','daniel'];
 const englishVoices=()=>{
   try{ return (speechSynthesis.getVoices()||[]).filter(v=>/^en/i.test(v.lang||'')); }
   catch(e){ return []; }
@@ -4864,8 +4853,15 @@ function briefPickVoice(){
     // better, so prefer a local match — those are the downloaded ones.
     if(matches.length) return matches.find(v=>v.localService)||matches[0];
   }
-  const gb=vs.filter(v=>/^en[-_](IE|GB)/i.test(v.lang||''));
-  if(gb.length) return gb.find(v=>v.localService)||gb[0];
+  // Two passes, not one regex with reordered alternation: alternation order
+  // inside a filter predicate has no effect on which voices match or on the
+  // order of the result, so "Irish first" has to be an actual first pass.
+  // Otherwise a device with a local en-GB voice and a remote en-IE one still
+  // yields the British voice, which is the opposite of the intent.
+  for(const re of [/^en[-_]IE/i, /^en[-_]GB/i]){
+    const pool=vs.filter(v=>re.test(v.lang||''));
+    if(pool.length) return pool.find(v=>v.localService)||pool[0];
+  }
   return vs.find(v=>v.localService)||vs[0];
 }
 if(speechOK()){
@@ -4879,8 +4875,7 @@ if(speechOK()){
 
 // hm() renders "2 h 10 min", which a synthesiser reads as "two h ten min".
 const spokenHM=x=>{
-  let h=Math.floor(x), m=Math.round((x-h)*60);
-  if(m===60){ h++; m=0; }
+  const {h,m}=splitHM(x);
   const p=[];
   if(h) p.push(h+(h===1?' hour':' hours'));
   if(m) p.push(m+(m===1?' minute':' minutes'));
