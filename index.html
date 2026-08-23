@@ -4829,8 +4829,9 @@ function exportEverything(){
 const speechOK=()=>'speechSynthesis' in window && typeof SpeechSynthesisUtterance!=='undefined';
 /* Alex, chosen on the device. Apple ships no Southern-US voice, so a
    McConaughey impression is not on the table — Alex is simply the deepest,
-   most natural American male Apple has, and the slowed rate below does more
-   for the drawl than any name choice could.
+   most natural American male Apple has. A slowed rate was tried for the
+   drawl and dropped again: it read as sluggish rather than laid-back, so
+   only the lowered pitch remains.
 
    Note this list OVERRIDES the phone's own default voice: setting Alex in
    iOS Settings alone would not reach the app, because a named match here
@@ -4949,7 +4950,10 @@ function briefSpeak(e){
     applyVoice(u);
     // Measured and slightly lowered. Jarvis is never hurried, and the
     // default rate reads as a station announcement rather than an aide.
-    u.rate=0.82; u.pitch=0.85;
+    // rate 1 is the voice's natural pace. 0.82 was tuned for a drawl and
+    // read as sluggish in use; the lowered pitch alone carries enough of
+    // the character. One number to nudge if it ever needs re-tuning.
+    u.rate=1; u.pitch=0.85;
     u.onend=()=>briefSetSpeaking(false);
     u.onerror=()=>briefSetSpeaking(false);
     briefSetSpeaking(true);
