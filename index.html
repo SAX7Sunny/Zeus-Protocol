@@ -1012,7 +1012,7 @@
   @media (min-width:900px){
     /* Container: same centred idea as the phone's max-width:640px body,
        just wider — clearance on each side for the two fixed rails. */
-    body { max-width:1200px; padding-left:220px; padding-right:300px; }
+    body { max-width:1240px; padding-left:220px; padding-right:352px; }
     main, .filters { max-width:680px; margin-left:auto; margin-right:auto; }
     main { padding-bottom:40px; }
 
@@ -1045,12 +1045,12 @@
        header's box entirely, so this still docks to the true right edge. */
     .rail-right {
       display:flex; flex-direction:column; gap:22px;
-      position:fixed; top:0; right:0; width:280px; height:100vh;
+      position:fixed; top:0; right:0; width:332px; height:100vh;
       padding:32px 20px; border-left:1px solid var(--line); background:var(--bg);
       overflow-y:auto; z-index:10;
     }
     .progress-wrap { margin-top:0; }
-    #railAgenda, #railTasks { display:block; }
+    #railBio, #railTasks { display:block; }
     .rail-h { font-family:var(--mono); font-size:10.5px; letter-spacing:.14em;
       text-transform:uppercase; color:var(--faint); margin-bottom:10px; }
     .rail-row { display:flex; align-items:baseline; gap:10px; padding:7px 0;
@@ -1060,17 +1060,27 @@
       font-variant-numeric:tabular-nums; color:var(--frost); font-weight:600; }
     .rail-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); }
     .rail-empty { font-size:12.5px; color:var(--faint); }
+    .rail-sub { font-family:var(--mono); font-size:10px; color:var(--faint);
+      padding:0 0 7px; margin-top:-3px; }
+    .rail-row.sub { padding-left:10px; border-left:2px solid var(--amber); }
+    .rail-val { font-family:var(--mono); font-size:11px; color:var(--amber);
+      font-variant-numeric:tabular-nums; margin-left:auto; flex-shrink:0; }
+    /* The band pill is sized for the Bio tab; tighten it for the rail. */
+    .rail-row .bp-band { font-size:8.5px; padding:1px 4px; margin-left:auto; flex-shrink:0; }
 
     /* Day arc: always on screen here instead of behind a tap, sized to the
        rail's own width. perspective is tightened for the smaller box —
        1150px (the reference's value, tuned for a ~460px stage) reads as an
        exaggerated tilt at 240px, so a bigger number flattens it back down. */
     #arcRailWrap { display:block; margin-bottom:2px; cursor:pointer; }
-    #arcRailWrap .arc-stage { width:100%; max-width:240px; aspect-ratio:1; margin:0 auto; perspective:2000px; }
-    #arcRailWrap .arc-hud { top:44%; width:min(74%, 168px); }
-    #arcRailWrap .arc-pct { font-size:26px; margin:4px 0 4px; }
-    /* The rail stage is 240px, so the readout tightens to match. */
-    #arcRailWrap .arc-next { margin-top:6px; padding-top:5px; font-size:10px; }
+    #arcRailWrap .arc-stage { width:100%; max-width:292px; aspect-ratio:1; margin:0 auto; perspective:2200px; }
+    #arcRailWrap .arc-hud { top:46%; width:min(74%, 200px); }
+    #arcRailWrap .arc-pct { font-size:30px; margin:4px 0 5px; }
+    /* The rail readout is a summary, not the workspace: the next-up row is
+       dropped here because at this size it overlapped the ring, and the
+       centre column already lists what is coming. It stays in the
+       full-screen overlay, where there is room for it. */
+    #arcRailWrap .arc-next { display:none; }
     /* At 240px the rail arc is a summary, not a workspace — its nodes are
        too small to inspect. Clicking anywhere on it opens the full-screen
        overlay, which is where detail lives on desktop too. */
@@ -1157,7 +1167,7 @@
   <aside class="rail-right" id="railRight">
   <!-- Desktop-only: the day arc, always on screen here. Filled by
        arcStageHTML('rail') at boot; unhidden by the (min-width:900px)
-       query the same way #railAgenda/#railTasks are. -->
+       query the same way #railBio/#railTasks are. -->
   <div id="arcRailWrap" hidden></div>
   <div class="progress-wrap" id="progWrap" role="button" tabindex="0" aria-label="Open day arc"
     onclick="arcBlockTap()" onkeydown="arcBlockKey(event)">
@@ -1174,7 +1184,7 @@
   <!-- Desktop-only: populated by renderRail(). Stays hidden on mobile via
        the [hidden] attribute — the (min-width:900px) query is the only place
        that turns it back on, so narrowing the window removes it again. -->
-  <div class="rail-section" id="railAgenda" hidden></div>
+  <div class="rail-section" id="railBio" hidden></div>
   <div class="rail-section" id="railTasks" hidden></div>
   </aside>
   <div class="tabs-wrap" id="tabsWrap">
@@ -2291,21 +2301,44 @@ window.addEventListener('resize',()=>{ syncHeaderHeight(); renderRail(); arcOnRe
 // Desktop-only right rail: today's agenda and today's open tasks, condensed.
 // Fixed to the actual calendar day, not viewDate — the rail doesn't navigate
 // with the day nav, it's the one thing on screen that always means "today".
-// No-ops on mobile, where #railAgenda/#railTasks stay behind [hidden].
+// No-ops on mobile, where #railBio/#railTasks stay behind [hidden].
 function renderRail(){
   if(!isDesktopLayout()) return;
   const today=new Date(); today.setHours(0,0,0,0);
-  const items=agendaOn(today).slice(0,8);
-  const agBox=document.getElementById('railAgenda');
-  if(agBox){
-    const rows=items.map(a=>{
-      const title=a.kind==='routine'?a.ref.title
-        :a.kind==='supp'?'Supplements · '+a.ref.title
-        :a.ref.title||'Untitled';
-      const t=a.allDay?'All day':a.t;
-      return `<div class="rail-row"><span class="rail-time">${esc(t)}</span><span class="rail-title">${esc(title)}</span></div>`;
-    }).join('');
-    agBox.innerHTML=`<div class="rail-h">Today's agenda</div>`+(rows||'<div class="rail-empty">Nothing today.</div>');
+  /* Bio at a glance. This slot used to repeat today's agenda, which was
+     redundant beside the agenda tab and stale everywhere else. Biomarkers
+     are the opposite case: the only data in the app you have to go looking
+     for, so they are what belongs in a rail that is always on screen. */
+  const bioBox=document.getElementById('railBio');
+  if(bioBox){
+    const rows=[];
+    const last=BP.length?BP[BP.length-1]:null;
+    if(last){
+      const b=bpBand(last);
+      const age=Math.floor((dayStart(today)-dayStart(new Date(last.ts)))/86400000);
+      rows.push(`<div class="rail-row"><span class="rail-time">BP</span>
+        <span class="rail-title">${last.sys}/${last.dia}</span>
+        <span class="bp-band ${b.cls}">${b.label}</span></div>`);
+      rows.push(`<div class="rail-sub">${age===0?'measured today':age+' day'+(age===1?'':'s')+' ago'}</div>`);
+    }
+    if(PANELS.length){
+      const panel=PANELS[PANELS.length-1];
+      const vals=(panel.values||[]).filter(v=>v&&v.v!=null);
+      const out=vals.filter(v=>inRange(v)===false);
+      const days=Math.floor((dayStart(today)-dayStart(parseDay(panel.date)))/86400000);
+      rows.push(`<div class="rail-row"><span class="rail-time">Panel</span>
+        <span class="rail-title">${vals.length} marker${vals.length===1?'':'s'}</span>
+        <span class="bp-band ${out.length?'elev':'ok'}">${out.length?out.length+' out':'all in'}</span></div>`);
+      rows.push(`<div class="rail-sub">${days} day${days===1?'':'s'} since panel</div>`);
+      // Name the markers that are actually out of range — a count alone
+      // still means opening the tab to find out which.
+      out.slice(0,4).forEach(v=>rows.push(
+        `<div class="rail-row sub"><span class="rail-title">${esc(v.displayName||v.label)}</span>
+           <span class="rail-val">${esc(String(v.v))}${v.unit?' '+esc(v.unit):''}</span></div>`));
+      if(out.length>4) rows.push(`<div class="rail-sub">+${out.length-4} more out of range</div>`);
+    }
+    bioBox.innerHTML=`<div class="rail-h">Bio</div>`+
+      (rows.length?rows.join(''):'<div class="rail-empty">No readings yet.</div>');
   }
   const todayKey=key(today);
   const due=TASKS.filter(t=>!t.done&&t.date===todayKey)
