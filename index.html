@@ -1705,6 +1705,8 @@ document.getElementById('backupInput').addEventListener('change',e=>{
    ====================================================================== */
 let PANELS=[];          // {id,date,name,label,values:[{key,section,label,displayName,v,text,qual,unit,refLo,refHi}]}
 let bioNote='', bioBusy=false, bioMsg='';
+// Bio opens on blood pressure; the two heavier sections start folded away.
+let bioUploadOpen=false, bioIntegrationsOpen=false;
 // null = fall back to the default pair (newest by date vs second newest)
 let cmpA=null, cmpB=null;
 
@@ -4264,35 +4266,55 @@ function openBpDetail(){
   document.getElementById('overlay').classList.add('open');
 }
 
+/* Collapse header, same pattern and chrome as the calendar tab's
+   "Data & backup" card. The flag name is passed as a string because inline
+   handlers resolve against global scope, which for a classic script includes
+   top-level let bindings — the existing calDataOpen card relies on the same. */
+function bioFold(title,open,flag){
+  return open
+    ? `<div class="gcard" style="margin-bottom:8px"><div class="gtop">
+         <span class="gtitle">${esc(title)}</span>
+         <button class="ico edit" onclick="${flag}=false;render()" title="Hide">︿</button>
+       </div></div>`
+    : `<div class="gcard cal-collapsed" onclick="${flag}=true;render()"><div class="gtop">
+         <span class="gtitle">${esc(title)}</span>
+         <span class="cal-collapsed-meta">›</span>
+       </div></div>`;
+}
+
 function renderBio(c){
-  c.insertAdjacentHTML('beforeend',
-    `<div class="note warn" style="margin:6px 6px 14px"><span class="beta-pill">Beta</span>
-      &nbsp;Device connections are scaffolded, not live yet. Biomarker upload works now.</div>`);
-
-  c.insertAdjacentHTML('beforeend', brandCard('whoop','brand-whoop','WHOOP',
-    'Recovery, strain, HRV and sleep. <b>Not connected.</b>',
-    'WHOOP has a real public API, but its OAuth flow needs a client secret, which cannot live in a web page. This needs a small backend — the same Cloudflare Worker you use for the calendar could do it.'));
-
-  c.insertAdjacentHTML('beforeend', brandCard('health','brand-health','Apple Health',
-    'Steps, workouts, heart rate, sleep. <b>Not connected.</b>',
-    'Apple gives web pages no access to HealthKit at all — it is native-only, with no exception. The realistic route is an Apple Shortcut that exports the metrics you want and hands them to this app.'));
-
-  c.insertAdjacentHTML('beforeend', brandCard('eight','brand-eight','EIGHT SLEEP',
-    'Sleep stages, bed temperature, HRV. <b>Not connected.</b>',
-    'Eight Sleep publishes no official API. Only unofficial endpoints exist, which need your account password and can break without warning. I would rather wire this up properly than build on that.'));
-
-  // Hand-entered readings sit above the PDF upload: it is the thing logged
-  // most often, and it needs no file.
+  // Blood pressure leads: it is hand-entered, logged most often, needs no
+  // file, and is the reason the tab gets opened day to day. The PDF upload
+  // and the device integrations are occasional, so they fold away.
   c.insertAdjacentHTML('beforeend', bpSectionHTML());
 
-  c.insertAdjacentHTML('beforeend',
-    `<div class="upload-zone">
-      <h3>Upload biomarkers</h3>
+  c.insertAdjacentHTML('beforeend', bioFold('Upload biomarkers',bioUploadOpen,'bioUploadOpen'));
+  if(bioUploadOpen) c.insertAdjacentHTML('beforeend',
+    `<div class="upload-zone" style="margin-top:0">
       <p>Pick a blood test <strong>PDF</strong>. Values are read out and compared with your previous panel.</p>
       <button class="import-btn" ${bioBusy?'disabled':''} onclick="document.getElementById('pdfInput').click()">
         ${bioBusy?'Reading…':'Choose PDF'}</button>
       ${bioMsg?`<div class="import-status">${esc(bioMsg)}</div>`:''}
     </div>`);
+
+  c.insertAdjacentHTML('beforeend', bioFold('Integrations',bioIntegrationsOpen,'bioIntegrationsOpen'));
+  if(bioIntegrationsOpen){
+    c.insertAdjacentHTML('beforeend',
+      `<div class="note warn" style="margin:6px 6px 14px"><span class="beta-pill">Beta</span>
+        &nbsp;Device connections are scaffolded, not live yet. Biomarker upload works now.</div>`);
+
+    c.insertAdjacentHTML('beforeend', brandCard('whoop','brand-whoop','WHOOP',
+      'Recovery, strain, HRV and sleep. <b>Not connected.</b>',
+      'WHOOP has a real public API, but its OAuth flow needs a client secret, which cannot live in a web page. This needs a small backend — the same Cloudflare Worker you use for the calendar could do it.'));
+
+    c.insertAdjacentHTML('beforeend', brandCard('health','brand-health','Apple Health',
+      'Steps, workouts, heart rate, sleep. <b>Not connected.</b>',
+      'Apple gives web pages no access to HealthKit at all — it is native-only, with no exception. The realistic route is an Apple Shortcut that exports the metrics you want and hands them to this app.'));
+
+    c.insertAdjacentHTML('beforeend', brandCard('eight','brand-eight','EIGHT SLEEP',
+      'Sleep stages, bed temperature, HRV. <b>Not connected.</b>',
+      'Eight Sleep publishes no official API. Only unofficial endpoints exist, which need your account password and can break without warning. I would rather wire this up properly than build on that.'));
+  }
 
   if(!PANELS.length){
     c.insertAdjacentHTML('beforeend','<div class="empty">No blood panels yet.<br>Upload one to start tracking.</div>');
