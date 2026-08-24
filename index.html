@@ -2293,7 +2293,14 @@ function markFirstOpenRow(c){
   if(c.querySelector('#scrollAnchor')) return;
   const first=[...c.querySelectorAll('.row')]
     .find(r=>!r.classList.contains('done')&&!r.classList.contains('opt-off'));
-  if(first) first.id='scrollAnchor';
+  if(!first) return;
+  /* Anchor the enclosing block, not the row, when there is one. Scrolling
+     straight to the row leaves its .block-head — the block's title and time —
+     just above the viewport, so you land on "Mg Complex" with no indication
+     that it belongs to "Daytime / post-workout · 18:00".
+     Self-scoping: only Supps groups rows into .block, so Routine and Agenda
+     keep anchoring the row itself. */
+  (first.closest('.block')||first).id='scrollAnchor';
 }
 
 function syncTabFade(){
