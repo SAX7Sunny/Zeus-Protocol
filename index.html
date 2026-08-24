@@ -434,7 +434,14 @@
   .row2 .field label { font-size:11px; letter-spacing:.03em; white-space:nowrap;
     overflow:hidden; text-overflow:ellipsis; }
   .row2 .field input, .row2 .field select { width:100%; min-width:0; padding:11px 10px; font-size:14px; }
-  input[type="time"], input[type="date"], input[type="number"] {
+  /* datetime-local belongs here too. Left out, Safari keeps the control at
+     its intrinsic width — it will not shrink to its container — so the
+     blood-pressure "taken at" field pushed straight through the right edge
+     of its card. Chrome shrinks it either way, which is why this only shows
+     up on the phone. appearance:none also makes the field honour text-align,
+     which Safari otherwise ignores on these types. */
+  input[type="time"], input[type="date"], input[type="number"],
+  input[type="datetime-local"] {
     -webkit-appearance:none; appearance:none; min-width:0; max-width:100%; }
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }

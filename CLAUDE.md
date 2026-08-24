@@ -145,7 +145,11 @@ the non-obvious constraint, the browser quirk, the reason a regex looks odd.
 ## Things that have already gone wrong
 
 - Flex children need `min-width: 0`, or time and number inputs overlap on
-  narrow screens.
+  narrow screens. The same rule must list **every** date/time input type —
+  `datetime-local` was missed once and Safari, which unlike Chrome refuses to
+  shrink such a control below its intrinsic width, pushed it clean through
+  the side of its card. `appearance: none` on those types is load-bearing for
+  a second reason: without it Safari ignores `text-align`.
 - Safari reports a blocked fetch as `Load failed`, Chrome as `Failed to fetch`.
   Match both.
 - Google and iCloud serve `.ics` without CORS headers. All calendar fetches go
