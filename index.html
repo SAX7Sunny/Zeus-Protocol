@@ -4289,15 +4289,6 @@ function renderBio(c){
      id="scrollAnchor", and scrollToAnchor() puts it just under the header on
      open, so the tab lands on blood pressure and the occasional controls are
      a scroll up away rather than something to scroll past every time. */
-  c.insertAdjacentHTML('beforeend', bioFold('Upload biomarkers',bioUploadOpen,'bioUploadOpen'));
-  if(bioUploadOpen) c.insertAdjacentHTML('beforeend',
-    `<div class="upload-zone" style="margin-top:0">
-      <p>Pick a blood test <strong>PDF</strong>. Values are read out and compared with your previous panel.</p>
-      <button class="import-btn" ${bioBusy?'disabled':''} onclick="document.getElementById('pdfInput').click()">
-        ${bioBusy?'Reading…':'Choose PDF'}</button>
-      ${bioMsg?`<div class="import-status">${esc(bioMsg)}</div>`:''}
-    </div>`);
-
   c.insertAdjacentHTML('beforeend', bioFold('Integrations',bioIntegrationsOpen,'bioIntegrationsOpen'));
   if(bioIntegrationsOpen){
     c.insertAdjacentHTML('beforeend',
@@ -4316,6 +4307,15 @@ function renderBio(c){
       'Sleep stages, bed temperature, HRV. <b>Not connected.</b>',
       'Eight Sleep publishes no official API. Only unofficial endpoints exist, which need your account password and can break without warning. I would rather wire this up properly than build on that.'));
   }
+
+  c.insertAdjacentHTML('beforeend', bioFold('Upload biomarkers',bioUploadOpen,'bioUploadOpen'));
+  if(bioUploadOpen) c.insertAdjacentHTML('beforeend',
+    `<div class="upload-zone" style="margin-top:0">
+      <p>Pick a blood test <strong>PDF</strong>. Values are read out and compared with your previous panel.</p>
+      <button class="import-btn" ${bioBusy?'disabled':''} onclick="document.getElementById('pdfInput').click()">
+        ${bioBusy?'Reading…':'Choose PDF'}</button>
+      ${bioMsg?`<div class="import-status">${esc(bioMsg)}</div>`:''}
+    </div>`);
 
   c.insertAdjacentHTML('beforeend', bpSectionHTML());
 
