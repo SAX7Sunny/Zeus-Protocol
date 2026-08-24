@@ -153,5 +153,12 @@ the non-obvious constraint, the browser quirk, the reason a regex looks odd.
 - Lab reports label rows like `Alpha-Globulin 1` and `CA 19-9`. Anchor value
   extraction on the unit token, not on the first number, or the label loses
   its trailing digit.
-- Auto-scrolling the month grid to the current month pushed the subscription
-  card out of reach. Keep controls above the scroll region reachable.
+- Occasional controls sit ABOVE the primary content and the tab opens scrolled
+  past them, via `id="scrollAnchor"` plus `ANCHORED_TABS` — Calendar anchors on
+  the view switch, Bio on the blood-pressure card. This is deliberate (asked
+  for in August 2026), not the old bug: an earlier version auto-scrolled the
+  month grid and left the subscription card genuinely unreachable. The rule
+  that survives is *reachable*, not *visible* — scrolling up must always get
+  you back to them, so never trap the scroll or anchor below content the user
+  needs. When a tab is too short to scroll, the controls simply stay in view;
+  that is fine, do not pad the page to force it.
