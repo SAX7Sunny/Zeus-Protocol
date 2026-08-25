@@ -1919,6 +1919,20 @@ function parseLines(lines){
       const m=line.match(/^(.+?)\s+([<>≤≥]?\s*\d+(?:[.,]\d+)?|negativ|positiv|klar|tr(?:ü|ue)b|goldgelb|gelb|farblos)\b(.*)$/i);
       if(!m) continue;
       label=m[1]; rawVal=m[2]; rest=(m[3]||'').trim();
+      /* This branch has no unit to anchor on and will happily read
+         "1220 Wien, Wagramer Straße 144" as a measurement of 144. NOISE
+         cannot catch those: it is anchored at the start of the line and
+         lists particular labs' street names, so a letterhead beginning with
+         a postcode walks straight past it. These are generic instead —
+         no lab value carries a four-digit run, a phone or VAT marker, or a
+         trailing comma in its name, and a "value" that continues into
+         ".2023" is a date. Confined to the unitless branch so the
+         unit-anchored path, verified against a full report, is untouched. */
+      if(/\d{4}/.test(label)) continue;
+      if(/(?:\bTel\b|\bFax\b|@|www\.|https?:|\bATU\b|\bUID\b|\bIBAN\b)/i.test(label)) continue;
+      if(/,\s*$/.test(label)) continue;
+      if(/:/.test(label)) continue;        // "Ordination:Mo-Do 7" — marker names carry no colon
+      if(/^\.\d/.test(rest)) continue;
     }
     label=label.trim(); rawVal=rawVal.trim();
 
