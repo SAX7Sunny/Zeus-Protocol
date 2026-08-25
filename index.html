@@ -1823,19 +1823,35 @@ async function pdfToLines(file){
   for(let p=1;p<=pdf.numPages;p++){
     const page=await pdf.getPage(p);
     const tc=await page.getTextContent();
+    /* Work in VIEWPORT space, not raw PDF space. transform[4]/[5] are only
+       "x" and "y" in reading order for an upright page: labs routinely ship
+       landscape reports with /Rotate 270 and a rotated text matrix (a and d
+       near zero, the scale living in b and c), and there raw [5] tracks the
+       COLUMN, not the line. Grouping on it collapsed every visual column
+       into one "row" — one line holding the whole table's units, another
+       holding every reference range — so the parser saw no label/value pairs
+       at all and matched only letterhead noise. Util.transform folds the
+       page rotation in, after which x is across the line and y down it. */
+    const vp=page.getViewport({scale:1});
+    const T=window.pdfjsLib.Util.transform;
     // Group items into visual rows. Keying on an exact rounded y splits one
     // visual line in two whenever items differ by a sub-pixel amount, which
     // can strand a label from its value and lose the reading entirely — so
     // match within a small tolerance instead.
     const rows=[];
     tc.items.forEach(it=>{
-      const y=it.transform[5];
-      const item={x:it.transform[4], s:it.str, w:it.width||0,
-        h:it.height||Math.abs(it.transform[0])||10};
+      const m=T(vp.transform,it.transform);
+      const y=m[5];
+      // Lengths survive rotation, so the text-space advance is still the
+      // right width; height comes off the transformed matrix because
+      // it.height is 0 for rotated text.
+      const item={x:m[4], s:it.str, w:it.width||0,
+        h:Math.hypot(m[2],m[3])||it.height||10};
       const row=rows.find(r=>Math.abs(r.y-y)<=Y_TOL);
       if(row) row.items.push(item); else rows.push({y,items:[item]});
     });
-    rows.sort((a,b)=>b.y-a.y);
+    // Viewport y grows downward, so top-to-bottom is ascending.
+    rows.sort((a,b)=>a.y-b.y);
     rows.forEach(r=>{
       // pdf.js splits a visual line at font and kerning boundaries, so
       // "Hämoglobin" can arrive as several items. Joining unconditionally
