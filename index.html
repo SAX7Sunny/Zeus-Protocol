@@ -645,14 +645,21 @@
     background:var(--bg); color:var(--moss); font-size:13px; line-height:1;
     display:grid; place-items:center; border-radius:0; }
   .nx-i-row.done .nx-i-tick { border-color:rgba(79,230,176,.5); background:rgba(79,230,176,.14); }
+  /* Wide enough for "all day", not just HH:MM — otherwise a mixed calendar
+     list steps the title column in and out row by row. */
   .nx-i-time { font-family:var(--mono); font-size:11px; color:var(--frost);
-    font-variant-numeric:tabular-nums; flex-shrink:0; min-width:38px; }
+    font-variant-numeric:tabular-nums; flex-shrink:0; min-width:52px; }
   /* min-width:0 or a long title refuses to shrink and pushes the pencil out
      of the card — the same flex trap the date/time inputs hit. */
   .nx-i-name { flex:1; min-width:0; font-size:14px; color:var(--ink);
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .nx-i-edit { width:34px; height:34px; flex-shrink:0; border:0; background:none;
     color:var(--faint); font-size:13px; }
+  /* Same footprint as .nx-i-tick so a mixed or read-only list keeps its
+     columns; a dot rather than an empty box, which would read as unticked. */
+  .nx-i-bullet { width:34px; height:34px; flex-shrink:0; display:grid; place-items:center; }
+  .nx-i-bullet i { width:6px; height:6px; border-radius:50%; display:block; }
+  .nx-i-time { white-space:nowrap; }
 
   /* Lock-on and the radar sweep both moved into the script: selection is a
      stroke-width/opacity change applied per frame by nxPlace(), and the sweep
@@ -2493,6 +2500,16 @@ function nxSuppItems(){
     edit:()=>arcOpenSupp()
   }));
 }
+// Read-only by nature: an event from a subscribed feed is not ours to tick
+// or edit, so these rows carry neither. The card's "Open Calendar" button is
+// the way through to the day view.
+function nxCalItems(){
+  return eventsOn(viewDate).map(e=>({
+    id:'e:'+(e.uid||e.title)+'|'+e.start.getTime(),
+    time:e.allDay?'all day':hhmm(e.start),
+    name:e.title||'Untitled', done:false
+  }));
+}
 function nxTaskItems(){
   const dk=key(viewDate);
   return visibleTasks().filter(t=>t.date===dk)
@@ -2512,7 +2529,7 @@ const NX_META={
   tasks: { items:nxTaskItems, tab:'tasks' },
   bio:   { tab:'bio', size:()=>PANELS.length },
   bp:    { tab:'bio', size:()=>BP.length },
-  cal:   { tab:'cal', size:()=>SUBS.length }
+  cal:   { items:nxCalItems, tab:'cal', size:()=>SUBS.length }
 };
 
 function nxDomains(){
@@ -2878,14 +2895,21 @@ function arcRenderDetail(){
   if(!d){ box.innerHTML='<div class="arc-d-hint">Tap a domain for details</div>'; return; }
   const col='var('+NX_STATE_COLOR[d.state]+')';
   const stateLbl={ok:'Nominal',watch:'Watch',warn:'Attention'}[d.state];
+  // Not every domain's items are ours to change — calendar events come from
+  // a feed. Rows without a toggle get a plain marker in the checkbox's place
+  // so the times still line up in a column.
   const rows=d.items.map(i=>`
     <div class="nx-i-row${i.done?' done':''}">
-      <button class="nx-i-tick" onclick="nxItemToggle('${esc(i.id)}')"
-        aria-label="${i.done?'Undo':'Mark done'} ${esc(i.name)}">${i.done?'✓':''}</button>
+      ${i.toggle
+        ? `<button class="nx-i-tick" onclick="nxItemToggle('${esc(i.id)}')"
+             aria-label="${i.done?'Undo':'Mark done'} ${esc(i.name)}">${i.done?'✓':''}</button>`
+        : `<span class="nx-i-bullet"><i style="background:${col}"></i></span>`}
       <span class="nx-i-time">${esc(i.time||'—')}</span>
       <span class="nx-i-name">${esc(i.name)}</span>
-      <button class="nx-i-edit" onclick="nxItemEdit('${esc(i.id)}')"
-        aria-label="Edit ${esc(i.name)}">✎</button>
+      ${i.edit
+        ? `<button class="nx-i-edit" onclick="nxItemEdit('${esc(i.id)}')"
+             aria-label="Edit ${esc(i.name)}">✎</button>`
+        : ''}
     </div>`).join('');
   box.innerHTML=`<div class="arc-d-card">
     <button class="arc-d-close" onclick="arcClearSelection()" aria-label="Close details">✕</button>
@@ -3405,17 +3429,39 @@ function systemsReport(){
   if(BP.length){
     const days=Math.floor((dayStart(new Date())-dayStart(new Date(bpLatest().ts)))/86400000);
     const b=bpBand(bpLatest());
+    // State tracks HOW RECENT the reading is, not how good it was: green
+    // today, amber within the week, red after that. Set this way in August
+    // 2026 at the user's request — it used to colour by band, which meant a
+    // normal reading from three months ago sat there reading green.
+    // The band has not been dropped, it moved into the detail line, so a
+    // High reading still says so even while the dot is green for being
+    // fresh. Do not fold the band back into the state without asking.
     out.push({key:'bp', label:'Blood pressure',
-      detail:bpLatest().sys+'/'+bpLatest().dia+' · '+(days===0?'today':days+'d ago'),
+      detail:bpLatest().sys+'/'+bpLatest().dia+' · '+b.label.toLowerCase()
+             +' · '+(days===0?'today':days===1?'yesterday':days+'d ago'),
       val:bpLatest().sys+'/'+bpLatest().dia,
-      state: b.cls==='high'?'warn' : b.cls==='ok'?'ok':'watch'});
+      state: days===0?'ok' : days<=7?'watch' : 'warn'});
   }
 
-  if(SUBS.length){
+  // Reports the DAY first and the plumbing second: how many events are on
+  // this day is the thing worth glancing at, a feed count is not. State still
+  // tracks feed health, because a silently failing feed is the one calendar
+  // problem you cannot see by looking at the day.
+  // Also present when there are no subscriptions but imported .ics events
+  // exist — otherwise a day full of events had no calendar row at all.
+  const calEvents=eventsOn(viewDate);
+  if(SUBS.length||calEvents.length){
     const bad=SUBS.filter(s=>s.status==='err').length;
-    out.push({key:'cal', label:'Calendar feeds',
-      detail: bad?bad+' of '+SUBS.length+' failing' : SUBS.length+' syncing',
-      val: bad?bad+' failing' : SUBS.length+' feed'+(SUBS.length===1?'':'s'),
+    const evLbl=calEvents.length
+      ? calEvents.length+' event'+(calEvents.length===1?'':'s')
+      : 'no events';
+    const feeds=SUBS.length
+      ? (bad ? bad+' of '+SUBS.length+' feeds failing'
+             : SUBS.length+' feed'+(SUBS.length===1?'':'s')+' syncing')
+      : 'imported only';
+    out.push({key:'cal', label:'Calendar',
+      detail: evLbl+' · '+feeds,
+      val: bad ? bad+' failing' : evLbl,
       state: bad?'warn':'ok'});
   }
   return out;
