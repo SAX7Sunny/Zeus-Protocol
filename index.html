@@ -2087,6 +2087,16 @@ const streakPill=r=>{
 };
 function toggleOpt(id){ const m=optMarks(); m[id]=!m[id]; if(!m[id]) delete marks(state)[id]; render(); }
 const hhmm=d=>pad(d.getHours())+':'+pad(d.getMinutes());
+/* A new event starts at the next full hour: added at 11:30 it defaults to
+   12:00, at 14:38 to 15:00. Returns a Date rather than a string because
+   after 23:00 the next full hour is midnight, and the caller has to move the
+   date with it — otherwise the default would sit in the past. */
+function nextFullHour(){
+  const d=new Date();
+  d.setMinutes(0,0,0);
+  d.setHours(d.getHours()+1);
+  return d;
+}
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 /* ---------- UNDO ----------
@@ -4796,8 +4806,12 @@ function openSheet(kind,ref){
   } else if(sheetType==='event'){
     const r=editing?ROUTINES.find(x=>x.id===editing):null;
     document.getElementById('f-name').value=r?r.title:'';
-    document.getElementById('e-date').value=r&&r.date?r.date:dk();
-    document.getElementById('e-time').value=r?r.time:'09:00';
+    // Only roll the date forward when adding onto today; while looking at
+    // another day the user means that day, and "next hour from now" would
+    // drag them back to the present.
+    const nf=nextFullHour(), rollDate=!r && sameDay(viewDate,new Date());
+    document.getElementById('e-date').value=(r&&r.date)?r.date:(rollDate?key(nf):dk());
+    document.getElementById('e-time').value=r?r.time:hhmm(nf);
     document.getElementById('e-dur').value=r?r.dur:60;
     if(r && !r.date){ eSelDows=r.days?[...r.days]:[1,2,3,4,5,6,0]; setEMode('repeat'); }
     else { eSelDows=[1,2,3,4,5,6,0]; setEMode('once'); }
