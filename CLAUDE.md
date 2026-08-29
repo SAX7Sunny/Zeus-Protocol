@@ -137,6 +137,34 @@ Still no web fonts: the one-file rule above means the sci-fi font shelf
 (Orbitron, Rajdhani, …) is unavailable. The futurism is carried by colour,
 geometry and the existing `--mono` system stack.
 
+### The Nexus
+
+The centrepiece view — seven domains orbiting the day's completion, in the
+overlay on the phone and the right rail on desktop. It replaced the tilted
+day-arc dial in August 2026, at the user's request. Two things about it are
+load-bearing:
+
+- **It draws `systemsReport()`, it does not compute anything.** Every domain,
+  state and short value comes from that one function, which is also what the
+  SYSTEMS block lists. That is deliberate: the two can never disagree. If a
+  domain needs a new number, add it to `systemsReport()` — never derive one
+  in the Nexus by re-reading the same data, and never by parsing its own
+  `detail` sentence back apart.
+- **Depth is computed, not CSS 3D.** Orbits are ellipses; a node's angle
+  gives its distance from the viewer, which drives size and opacity. The old
+  dial used a real `rotateX` on a `preserve-3d` disc and paid for it twice —
+  layer divs at `translateZ` sat in front of the nodes in space and swallowed
+  taps regardless of DOM order, and every label had to be counter-rotated to
+  stay upright. Do not reintroduce `perspective` here.
+
+Two smaller ones, both found the hard way: node emphasis uses plain vector
+rings, never a per-node blur filter (seven filtered groups repositioned every
+frame is exactly the jank the glow rule above warns about — the one filter in
+the view is on the completion ring, which does not move); and the overlay's
+`viewBox` is wider than the drawing on purpose, because labels sit outside
+their node and a name like BLOOD PRESSURE on a node at the right flank runs
+well past the rim.
+
 Text in the interface is English. Code comments explain *why*, not *what* —
 the non-obvious constraint, the browser quirk, the reason a regex looks odd.
 

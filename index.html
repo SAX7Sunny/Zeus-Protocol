@@ -51,12 +51,6 @@
        prose, and this carries anything the eye scans down a column. System
        stack only — no web font, the file stays self-contained. */
     --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
-    /* Day-arc tilt, not a colour — read by .arc-stem/.arc-head-dot to
-       counter-rotate so they stay upright while the disc itself tilts.
-       Backed off from 60deg to read more clearly now the view is fixed
-       (no more drag to nudge it flatter yourself): the far side of the
-       ring and its hour labels were compressing hard at the steeper angle. */
-    --tilt: 44deg;
   }
 
   /* Data face: every value that has to line up vertically. tabular-nums is
@@ -534,147 +528,66 @@
   /* Every transition this pass touched, honoured. */
   @media (prefers-reduced-motion: reduce){
     .progress-bar, .eat-fill, .drag-shift, .tabs-wrap::after { transition:none; }
-    /* Ported from day-arc-3d.html verbatim: every entrance animation off,
-       final state shown immediately. Unconditional — the arc appears both
-       in the mobile overlay and the desktop rail, not just past 900px. */
-    .arc-disc, .arc-draw, .arc-stem, .arc-head-dot, .arc-hud { animation:none !important; opacity:1 !important; }
-    .arc-draw { stroke-dashoffset:0 !important; }
-    /* The radar sweep is ambient motion with no informational content, so
-       it goes away entirely rather than being frozen mid-rotation. */
-    #arcOvStageHost .arc-sweep { animation:none !important; display:none !important; }
+    /* The constellation's motion is JS-driven — NX_REDUCED in nxNow() lays it
+       out once at a fixed phase and never advances it, so there is nothing to
+       switch off here. The summary's entrance fade is the only CSS animation
+       left in the view. */
+    .arc-hud { animation:none !important; opacity:1 !important; }
   }
 
-  /* ================= Day Arc (ported from day-arc-3d.html) =================
-     Same stage/disc/layer/pin structure and animation names as the
-     reference; classes prefixed arc- so nothing here can collide with the
-     app's own rules. Two independent instances share this CSS: the mobile
-     overlay (#arcOverlay, opens on tap) and the desktop right-rail copy
-     (#arcRailWrap, always on screen) — each has its own DOM ids suffixed
-     -ov / -rail, built and driven by arcBuildFull()/arcRefresh() in the
-     script. Every colour is one of the app's existing CSS variables. */
-  .arc-stage { position:relative; perspective:1150px; perspective-origin:50% 42%; }
-  .arc-disc { position:absolute; inset:0; transform-style:preserve-3d;
-    transform: rotateX(var(--tilt)) rotateZ(var(--spin,0deg));
-    animation: arc-settle 1.6s cubic-bezier(.2,.85,.25,1) both; }
-  @keyframes arc-settle {
-    from { transform: rotateX(88deg) rotateZ(-26deg) scale(.82); opacity:0; }
-    to   { transform: rotateX(var(--tilt)) rotateZ(var(--spin,0deg)) scale(1); opacity:1; }
-  }
-  .arc-layer { position:absolute; inset:0; transform-style:preserve-3d; }
-  .arc-layer svg { width:100%; height:100%; overflow:visible; display:block; }
-  .arc-depth-1 { transform: translateZ(-16px); opacity:.30; }
-  .arc-depth-2 { transform: translateZ(-32px); opacity:.16; }
-  .arc-depth-3 { transform: translateZ(-48px); opacity:.07; }
-  .arc-plate   { transform: translateZ(2px); }
-  .arc-band    { transform: translateZ(14px); }
-  .arc-draw { stroke-dasharray:var(--arc-len); stroke-dashoffset:var(--arc-len);
-    animation: arc-draw 1.7s cubic-bezier(.22,.9,.28,1) .5s forwards; }
-  @keyframes arc-draw { to { stroke-dashoffset:0; } }
+  /* ================= Nexus =================
+     Replaced the tilted day-arc dial in August 2026 at the user's request.
+     Same shell as before — one instance in the mobile overlay (#arcOverlay),
+     one always-on copy in the desktop rail (#arcRailWrap), ids suffixed
+     -ov / -rail — but the drawing is different in kind: the seven domains
+     systemsReport() already computes, orbiting the day's completion.
 
-  /* NOTHING in the disc is tappable except the node heads — and in a
-     preserve-3d scene "behind in the DOM" does not mean behind in space.
-     Two things were eating taps: the .arc-band and .arc-plate LAYER DIVS
-     sit at translateZ(14px) and (2px), i.e. in front of the pin layer at
-     z=0, and each covers the whole stage; and the stems counter-rotate
-     toward the camera about their base, putting their far end in front of
-     the very dot they belong to. Disabling the layers' svg children was
-     not enough — the layer divs themselves are hit-testable boxes. So the
-     whole disc goes inert and only the dots opt back in. */
-  .arc-layer { pointer-events:none; }
-  .arc-head-dot { pointer-events:auto; }
-
-  .arc-pin { position:absolute; left:0; top:0; width:0; height:0; transform-style:preserve-3d; }
-  .arc-stem { position:absolute; left:-0.75px; bottom:0; width:1.5px;
-    background:linear-gradient(to top, transparent, currentColor);
-    opacity:.55; transform-origin:50% 100%; transform: rotateX(calc(-1 * var(--tilt)));
-    animation: arc-rise .55s cubic-bezier(.34,1.5,.5,1) both; }
-  @keyframes arc-rise { from { height:0; opacity:0 } }
-  .arc-head-dot { position:absolute; width:17px; height:17px; border-radius:50%;
-    left:-8.5px; border:2.5px solid currentColor; transform: rotateX(calc(-1 * var(--tilt)));
-    transition: transform .18s ease, box-shadow .18s ease;
-    animation: arc-pop .5s cubic-bezier(.34,1.6,.5,1) both; cursor:pointer; }
-  /* Invisible expanded hit area. Asymmetric on purpose: the dot faces the
-     camera but the whole disc is tilted, so its 17px height projects to
-     ~10px while the width stays ~17px. Padding vertically much harder than
-     horizontally is what makes the *rendered* target roughly square. */
-  /* Modest now — selection is handled by nearest-node logic on the stage,
-     so this only needs to make the hover state on desktop easy to trigger. */
-  .arc-head-dot::before { content:''; position:absolute; top:-12px; bottom:-12px;
-    left:-10px; right:-10px; }
-  @keyframes arc-pop { from { opacity:0; transform:rotateX(calc(-1 * var(--tilt))) scale(.2) } }
-  /* Mark II: a completed node reads as lit, not just filled. */
-  .arc-head-dot.done { background:currentColor; box-shadow:0 0 10px currentColor; }
-  .arc-head-dot:not(.done) { background:var(--bg); }
-  .arc-head-dot:focus { outline:none; }
-  /* :hover only, deliberately no :focus-visible — iOS Safari has a known
-     quirk where a tap can match :focus-visible (spec says it shouldn't,
-     real mice never trigger it on click, but touch does here), and with
-     no hover-equivalent "unhover" gesture the scaled-up dot and its tag
-     were getting stuck open after every tap. Desktop's real mouse hover is
-     unaffected; dot.blur() in the click handler is the belt-and-suspenders
-     version of this for browsers that do focus a tapped element. */
-  /* Hover effects are gated behind (hover:hover). iOS Safari applies :hover
-     on tap and has no "unhover" gesture, so on a phone these were sticking
-     on after every tap — which is how a clipped label ended up parked on
-     screen. Touch gets the deterministic .sel path below instead. */
-  @media (hover:hover){
-    .arc-pin:hover .arc-head-dot {
-      transform: rotateX(calc(-1 * var(--tilt))) scale(1.45); box-shadow:0 0 16px currentColor; }
-    .arc-pin:hover .arc-tag { opacity:1; }
-  }
-  .arc-tag { position:absolute; left:14px; opacity:0;
-    transform: rotateX(calc(-1 * var(--tilt))) rotateZ(calc(-1 * var(--spin,0deg)));
-    transform-origin:0 50%; font-family:var(--mono); font-size:11.5px; letter-spacing:.04em;
-    border:1px solid rgba(95,216,245,.55); padding:6px 10px;
-    border-radius:0; color:var(--ink); transition:opacity .16s ease; pointer-events:none;
-    /* Wrap instead of nowrap, and cap the width: a long name on a node near
-       the rim used to run straight off the stage and get clipped by the
-       overlay's overflow-x. width:max-content keeps short labels tight. */
-    white-space:normal; width:max-content; max-width:min(46vw, 200px);
-    line-height:1.35; text-align:left;
-    /* Same lift as the detail card — sitting directly over the ring, the
-       bare --surface fill was the worst offender for looking see-through. */
-    background:linear-gradient(rgba(95,216,245,.07), rgba(95,216,245,.07)), var(--surface);
-    box-shadow:0 6px 18px rgba(0,0,0,.8); }
-  /* Flipped for pins on the right half of the ring (set in JS from the pin's
-     actual x), so the label always grows INWARD, toward the middle of the
-     stage, rather than off whichever edge it happens to sit near. */
-  .arc-tag.flip { left:auto; right:14px; transform-origin:100% 50%; text-align:right; }
-  /* Selected node keeps its label up — the reliable path on touch, and it
-     lifts above neighbouring pins so nothing overlaps the text. */
-  .arc-pin.sel { z-index:6; }
-  .arc-pin.sel .arc-tag { opacity:1; }
-  /* ...and the day summary steps aside while a node is selected. A label on
-     a left- or right-rim node grows inward (that is what keeps it on
-     screen), which means it necessarily crosses the middle — where it
-     landed straight on top of the percentage. display, not opacity: the
-     readout's entrance animation uses fill-mode both and would otherwise
-     fight a transitioned opacity. Nothing is lost — the card below carries
-     the detail, and clearing the selection brings the summary right back. */
-  .arc-stage.has-sel .arc-hud { display:none; }
+     DEPTH IS COMPUTED, NOT CSS 3D (see the block comment on nxPlace). The
+     old dial used a real rotateX on a preserve-3d disc, and paid for it
+     twice: layer divs sat in front of the nodes in Z and swallowed taps, and
+     every label needed counter-rotating to stay upright. Flat SVG has
+     neither problem. Do not reintroduce perspective here. */
+  .arc-stage { position:relative; }
+  .nx-svg { position:absolute; inset:0; width:100%; height:100%;
+    display:block; overflow:visible; }
+  .nx-node { cursor:pointer; }
+  .nx-node:focus { outline:none; }
+  .nx-node:focus-visible .nx-ring { stroke:var(--ink); stroke-width:3; }
+  /* Transparent, and far wider than the drawing: nxPlace() sizes it to the
+     node radius plus 22 SVG units. The old dial's 17px dots were the single
+     most-reported annoyance on the phone — this is the fix, and it is why
+     nothing else in the stage is hit-testable. */
+  .nx-hit { fill:transparent; }
+  .nx-lab, .nx-val { pointer-events:none; }
+  .nx-val { text-shadow:0 0 12px rgba(95,216,245,.45); }
+  /* Scanlines. Overlay only, and only as a wash over the whole stage — one
+     static gradient, not a per-element effect, so it costs nothing per frame.
+     The rail copy is small enough that they would read as moire. */
+  .arc-overlay .arc-stage::after { content:''; position:absolute; inset:0;
+    pointer-events:none; background:repeating-linear-gradient(0deg,
+      rgba(95,216,245,.05) 0 1px, transparent 1px 3px); }
+  /* SVG text scales with the viewBox. The rail copy is 292px against a 400
+     unit box, so labels that read fine in the 560px overlay come out at
+     ~7px there. At that size the rail is a summary — colour, size and the
+     centre readout still carry it — so it simply carries no labels. */
+  #arcRailWrap .nx-lab, #arcRailWrap .nx-val { display:none; }
 
   /* Always the day summary now, and always click-through: detail moved out
      to its own card, so nothing in the middle of the disc can swallow a tap
      meant for a node behind it. */
-  .arc-hud { position:absolute; left:50%; top:42%; transform:translate(-50%,-50%);
+  /* Sits inside the core ring (r=84 of a 400 unit box), so it is narrower
+     than it was in the middle of the old disc — overrun would cross the ring
+     rather than just look loose. Dead centre now: the constellation is
+     symmetric about the middle, the tilted disc was not. */
+  .arc-hud { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
     text-align:center; pointer-events:none; animation:arc-fade .8s ease 1.9s both;
-    width:min(70%, 260px); }
+    width:min(34%, 150px); }
   @keyframes arc-fade { from { opacity:0; transform:translate(-50%,-42%) } }
   .arc-cap { font-family:var(--mono); font-size:10.5px; letter-spacing:.2em;
     text-transform:uppercase; color:var(--muted); }
-  .arc-pct { font-family:var(--mono); font-size:44px; font-weight:600; color:var(--moss);
-    font-variant-numeric:tabular-nums; line-height:1; margin:6px 0 7px;
+  .arc-pct { font-family:var(--mono); font-size:clamp(26px,7vw,38px); font-weight:600;
+    color:var(--moss); font-variant-numeric:tabular-nums; line-height:1; margin:5px 0 0;
     text-shadow:0 0 26px rgba(79,230,176,.35); }
-  .arc-state { font-family:var(--mono); font-size:11.5px; letter-spacing:.1em; }
-  .arc-clock { font-family:var(--mono); font-size:11px; color:var(--muted);
-    margin-top:5px; font-variant-numeric:tabular-nums; }
-  /* "What's next" is the single most useful thing for a glance at the day,
-     so it earns the line the redundant wall-clock used to hold. */
-  .arc-next { margin-top:9px; padding-top:8px; border-top:1px solid var(--line);
-    font-family:var(--mono); font-size:11px; color:var(--frost);
-    display:flex; gap:6px; justify-content:center; align-items:baseline; }
-  .arc-next .nt { font-variant-numeric:tabular-nums; font-weight:700; flex-shrink:0; }
-  .arc-next .nn { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   /* ---- node detail card (below the arc on phones, beside it on desktop) ----
      Sized for reading, not for squeezing into the middle of a tilted ring:
@@ -721,21 +634,30 @@
   .arc-d-hint { text-align:center; font-family:var(--mono); font-size:10.5px;
     letter-spacing:.14em; text-transform:uppercase; color:var(--faint);
     border:1px dashed var(--line); padding:14px 12px; }
+  /* The domain's own items, tickable and editable in place. Capped and
+     scrollable: a routine day is seventeen rows, and on the phone this card
+     is pinned to the bottom of the overlay with the constellation above it. */
+  .nx-items { margin-top:12px; border-top:1px solid var(--line); padding-top:4px;
+    max-height:min(34vh, 260px); overflow-y:auto; }
+  .nx-i-row { display:flex; align-items:center; gap:9px; padding:2px 0; }
+  .nx-i-row.done .nx-i-name { color:var(--faint); text-decoration:line-through; }
+  .nx-i-tick { width:34px; height:34px; flex-shrink:0; border:1px solid var(--line);
+    background:var(--bg); color:var(--moss); font-size:13px; line-height:1;
+    display:grid; place-items:center; border-radius:0; }
+  .nx-i-row.done .nx-i-tick { border-color:rgba(79,230,176,.5); background:rgba(79,230,176,.14); }
+  .nx-i-time { font-family:var(--mono); font-size:11px; color:var(--frost);
+    font-variant-numeric:tabular-nums; flex-shrink:0; min-width:38px; }
+  /* min-width:0 or a long title refuses to shrink and pushes the pencil out
+     of the card — the same flex trap the date/time inputs hit. */
+  .nx-i-name { flex:1; min-width:0; font-size:14px; color:var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .nx-i-edit { width:34px; height:34px; flex-shrink:0; border:0; background:none;
+    color:var(--faint); font-size:13px; }
 
-  /* Selected node reads as locked-on: a ring around it, always lit. */
-  .arc-pin.sel .arc-head-dot {
-    transform: rotateX(calc(-1 * var(--tilt))) scale(1.35);
-    box-shadow:0 0 0 3px rgba(95,216,245,.30), 0 0 16px currentColor; }
-
-  /* Radar sweep — the one piece of ambient motion. Scoped to the mobile
-     overlay only: the desktop rail arc is on screen the whole session, and a
-     perpetual sweep there is a distraction rather than atmosphere. */
-  @keyframes arc-sweep { to { transform:rotate(360deg); } }
-  /* Origin is 0 0 because the wedge is drawn around its own origin inside a
-     group already translated to the hub — no transform-box needed. */
-  #arcOvStageHost .arc-sweep { transform-origin:0 0; animation:arc-sweep 7s linear infinite; }
-  /* The rail copy renders the wedge but never spins it. */
-  .arc-sweep { transform-origin:0 0; }
+  /* Lock-on and the radar sweep both moved into the script: selection is a
+     stroke-width/opacity change applied per frame by nxPlace(), and the sweep
+     is a line whose far end is placed on the same ellipse as everything else,
+     so it stays in the orbital plane instead of spinning across it. */
 
   /* ---- mobile: opens on demand, full-screen ---- */
   .arc-overlay { display:none; position:fixed; inset:0; background:var(--bg); z-index:35;
@@ -785,17 +707,20 @@
      the shorter side instead of filling the wider one. Growth therefore
      comes from width, and the vertical slack the tilt leaves is reclaimed
      by easing the tilt (below) rather than by squashing the box. */
-  .arc-overlay .arc-stage { width:100%; max-width:min(96vw, 560px); aspect-ratio:1; margin:0 auto; }
+  /* aspect-ratio matches the viewBox (516x408). Left at 1 it letterboxed a
+     wide drawing inside a square box and threw away a fifth of the width —
+     on a phone that is the difference between legible labels and not. */
+  .arc-overlay .arc-stage { width:100%; max-width:min(100vw, 620px);
+    aspect-ratio:516/408; margin:0 auto; }
   /* The 42% default was tuned for the rail's steep 44deg, where the disc's
      visual centre sits high. At the overlay's gentler tilt the readout has
      to drop back toward the true centre or it collides with the ring's top
      edge — which it did, with the taller next-up row added. */
-  .arc-overlay .arc-hud { top:49%; }
+  .arc-overlay .arc-hud { top:50%; }
   /* Eased well back from the rail's 44deg. Foreshortening is what made the
      far side of the ring hard to read, and a rounder disc also wastes less
      of the screen's height — both of which is what "bigger and readable"
      actually needs here. Scoped, so the rail keeps its steeper angle. */
-  .arc-overlay { --tilt:34deg; }
   .arc-close { position:fixed; top:calc(16px + env(safe-area-inset-top)); right:16px;
     width:36px; height:36px; border-radius:50%; background:var(--surface); border:1px solid var(--line);
     color:var(--ink); font-size:15px; z-index:36; }
@@ -1079,19 +1004,19 @@
     /* The band pill is sized for the Bio tab; tighten it for the rail. */
     .rail-row .bp-band { font-size:8.5px; padding:1px 4px; margin-left:auto; flex-shrink:0; }
 
-    /* Day arc: always on screen here instead of behind a tap, sized to the
-       rail's own width. perspective is tightened for the smaller box —
-       1150px (the reference's value, tuned for a ~460px stage) reads as an
-       exaggerated tilt at 240px, so a bigger number flattens it back down. */
+    /* Nexus: always on screen here instead of behind a tap, sized to the
+       rail's own width. No perspective — the tilt is in the geometry now, so
+       this box needs no 3D context and the view does not distort with size. */
     #arcRailWrap { display:block; margin-bottom:2px; cursor:pointer; }
-    #arcRailWrap .arc-stage { width:100%; max-width:292px; aspect-ratio:1; margin:0 auto; perspective:2200px; }
-    #arcRailWrap .arc-hud { top:46%; width:min(74%, 200px); }
-    #arcRailWrap .arc-pct { font-size:30px; margin:4px 0 5px; }
-    /* The rail readout is a summary, not the workspace: the next-up row is
-       dropped here because at this size it overlapped the ring, and the
-       centre column already lists what is coming. It stays in the
-       full-screen overlay, where there is room for it. */
-    #arcRailWrap .arc-next { display:none; }
+    #arcRailWrap .arc-stage { width:100%; max-width:292px; aspect-ratio:1; margin:0 auto; }
+    #arcRailWrap .arc-hud { top:50%; width:min(42%, 110px); }
+    #arcRailWrap .arc-pct { font-size:22px; }
+    /* The rail readout is the percentage and nothing else. Everything else
+       these lines carried — the eating countdown, what is next — is spelled
+       out in the status block immediately below, and at 292px the core ring
+       is only ~120px across, so a line of mono text runs straight over it.
+       They all stay in the full-screen overlay, where there is room. */
+
     /* At 240px the rail arc is a summary, not a workspace — its nodes are
        too small to inspect. Clicking anywhere on it opens the full-screen
        overlay, which is where detail lives on desktop too. */
@@ -1111,8 +1036,10 @@
     .arc-ov-body { flex-direction:row; align-items:center; justify-content:center;
       gap:36px; max-width:1180px; margin:0 auto; padding-bottom:0; }
     #arcOvStageHost { width:auto; flex:0 1 auto; }
-    .arc-overlay .arc-stage { width:min(52vw, 74vh); max-width:none; }
-    .arc-overlay { --tilt:30deg; }
+    /* Bigger than the old disc got: the wider viewBox reserves margin for
+       the labels, so the drawing itself occupies less of the box and the
+       stage has to grow to compensate. */
+    .arc-overlay .arc-stage { width:min(62vw, 96vh); max-width:none; }
     /* Back into the row here: side by side with align-items:center the row's
        height is the stage's, so the card growing or shrinking cannot move
        the disc — the phone's pinning is unnecessary and would misplace it. */
@@ -1176,11 +1103,11 @@
     <button onclick="shiftDay(1)">›</button>
   </div>
   <aside class="rail-right" id="railRight">
-  <!-- Desktop-only: the day arc, always on screen here. Filled by
+  <!-- Desktop-only: the nexus, always on screen here. Filled by
        arcStageHTML('rail') at boot; unhidden by the (min-width:900px)
        query the same way #railBio/#railTasks are. -->
   <div id="arcRailWrap" hidden></div>
-  <div class="progress-wrap" id="progWrap" role="button" tabindex="0" aria-label="Open day arc"
+  <div class="progress-wrap" id="progWrap" role="button" tabindex="0" aria-label="Open nexus"
     onclick="arcBlockTap()" onkeydown="arcBlockKey(event)">
     <div class="status-head">
       <div class="status-left"><span class="pct" id="pct">0%</span><span class="pct-sub">done</span></div>
@@ -1220,7 +1147,7 @@
 <button class="fab" onclick="openSheet('add')" aria-label="Add">+<span class="fab-label" hidden>Add</span></button>
 <div class="undo-toast" id="undoToast"></div>
 
-<!-- The day arc, full screen. Opened by tapping the status block on the
+<!-- The nexus, full screen. Opened by tapping the status block on the
      phone or the rail arc on desktop; the two differ only in how the body
      below lays out (stacked vs. side-by-side), which is CSS, not markup.
      Fixed view (no drag), so nothing here captures the pointer — this
@@ -1233,7 +1160,7 @@
 </div>
 
 <div class="arc-overlay" id="arcOverlay" onclick="arcOverlayTap(event)">
-  <button class="arc-close" onclick="arcCloseOverlay()" aria-label="Close day arc">✕</button>
+  <button class="arc-close" onclick="arcCloseOverlay()" aria-label="Close nexus">✕</button>
   <!-- Populated by arcRenderTaskList(); hidden via the DOM property (not
        an attribute) when there's nothing scheduled, so it never leaves an
        empty header behind. -->
@@ -2055,12 +1982,12 @@ function renderEatWindow(){
   if(!show){ head.innerHTML=''; return; }
   const st=eatingState(now);
   wrap.classList.add(st.mode==='eating'?'eat-eating':'eat-fasting');
-  // The whole block now opens the day arc on tap (see #progWrap's onclick),
+  // The whole block now opens the nexus on tap (see #progWrap's onclick),
   // so "tap to edit" no longer applies to the block as a whole — the ✎
   // keeps that reachable on its own, with stopPropagation so it doesn't
   // also open the arc. Desktop drops the hint text since the block is inert
   // there (arc is already inline in the rail), but keeps the ✎.
-  const tapHint=isDesktopLayout()?'':' · tap for day arc';
+  const tapHint=isDesktopLayout()?'':' · tap for nexus';
   head.innerHTML=`
     <div class="eat-row">
       <span class="eat-label">${st.mode==='eating'?'Eating window':'Fasting'}</span>
@@ -2489,84 +2416,119 @@ function render(){
   syncHeaderHeight();
 }
 
-/* ================= Day Arc (ported from day-arc-3d.html) =================
-   Two independent instances share this data/build logic: the desktop right
-   rail (-rail, always on screen) and the mobile full-screen overlay (-ov,
-   opens on tap). Real data, not the demo's hardcoded array — pins come from
-   activeRoutinesOn(viewDate) + supplement blocks with items + timed visible
-   tasks for viewDate; "done" is the actual tick, never a time comparison.
-   Category colours reuse the app's own mapping (health frost, sport clay,
-   mental moss, others/event amber-or-frost per .tag rules, tasks amber
-   per .tag.task, supplements frost per the app's own convention). */
-const ARC_CAT_COLOR={health:'frost',sport:'clay',mental:'moss',planning:'amber',event:'frost'};
-const ARC_NS='http://www.w3.org/2000/svg', ARC_CX=200, ARC_CY=200, ARC_R=150;
-// 'HH:MM' -> decimal hours. Used by the arc's geometry and by the
-// systems readout to decide what is already past due.
+/* ================= Nexus =================
+   Replaced the tilted day-arc dial in August 2026, at the user's request:
+   the seven domains systemsReport() already computes, orbiting the day's
+   completion. Nothing new is tracked — this is that same report drawn
+   instead of listed, which is why the SYSTEMS block and this view can never
+   disagree.
+
+   Two independent instances share everything below: the desktop right rail
+   (-rail, always on screen) and the mobile full-screen overlay (-ov, opens
+   on tap). Ids are suffixed accordingly; arcNode() resolves them.
+
+   DEPTH IS COMPUTED, NOT CSS 3D. Orbits are ellipses; a node's angle gives
+   its distance from the viewer, which drives its size and opacity. The old
+   dial used a real rotateX on a preserve-3d disc and paid for it twice —
+   layer divs sat in front of the nodes in Z and swallowed taps, and every
+   label had to be counter-rotated to stay upright. Flat SVG has neither
+   problem: a node's hit area is exactly where it is drawn. Do not
+   reintroduce perspective here. */
+const NX_CX=200, NX_CY=200, NX_R=150;
+// Ellipse squash. Reads as the tilt of the orbital plane; also the only
+// number to touch if the view ever needs to look flatter or steeper. 0.60
+// rather than something flatter because the stage is close to square and a
+// very flat ellipse leaves the top and bottom of it empty — depth still
+// reads clearly at this angle.
+const NX_TILT=0.60;
+const NX_TURN=260000, NX_SAT_TURN=95000;   // ms per revolution — deliberately slow
+const NX_STATE_COLOR={ok:'--moss',watch:'--amber',warn:'--rose'};
+const NX_NS='http://www.w3.org/2000/svg';
+const svgEl=(tag,a={})=>{ const e=document.createElementNS(NX_NS,tag); for(const k in a) e.setAttribute(k,a[k]); return e; };
+// 'HH:MM' -> decimal hours. Used here and by systemsReport() to decide what
+// is already past due.
 const hhmmHours=t=>{ const [h,m]=t.split(':').map(Number); return h+m/60; };
-const arcAngle=h=>(h/24)*360-90;
-const arcPoint=(h,r)=>{ const a=arcAngle(h)*Math.PI/180; return [ARC_CX+r*Math.cos(a),ARC_CY+r*Math.sin(a)]; };
-const svgEl=(tag,a={})=>{ const e=document.createElementNS(ARC_NS,tag); for(const k in a) e.setAttribute(k,a[k]); return e; };
-function arcArcPath(from,to,r){
-  const [x1,y1]=arcPoint(from,r), [x2,y2]=arcPoint(to,r);
-  return `M ${x1} ${y1} A ${r} ${r} 0 ${(to-from)>12?1:0} 1 ${x2} ${y2}`;
-}
+
 function arcStageHTML(suffix){
+  // The overlay's viewBox is wider than the drawing on purpose: labels sit
+  // OUTSIDE their node (growing inward would cross the percentage in the
+  // middle), and a name like BLOOD PRESSURE on a node at the right flank runs
+  // ~70 units past the rim. Without the margin it is drawn outside the stage
+  // box and lands under the detail card. The rail carries no labels, so it
+  // keeps the tight box and stays as large as its 292px allows.
+  const box = suffix==='ov' ? '-58 -4 516 408' : '0 0 400 400';
   return `<div class="arc-stage" id="arcStage-${suffix}">
-      <div class="arc-disc" id="arcDisc-${suffix}">
-        <div class="arc-layer arc-depth-3"><svg viewBox="0 0 400 400" id="arcD3-${suffix}"></svg></div>
-        <div class="arc-layer arc-depth-2"><svg viewBox="0 0 400 400" id="arcD2-${suffix}"></svg></div>
-        <div class="arc-layer arc-depth-1"><svg viewBox="0 0 400 400" id="arcD1-${suffix}"></svg></div>
-        <div class="arc-layer arc-plate"><svg viewBox="0 0 400 400" id="arcPlate-${suffix}"></svg></div>
-        <div class="arc-layer arc-band"><svg viewBox="0 0 400 400" id="arcBand-${suffix}"></svg></div>
-        <div class="arc-layer" id="arcPins-${suffix}"></div>
-      </div>
+      <svg class="nx-svg" viewBox="${box}" id="nxSvg-${suffix}" aria-hidden="true"></svg>
       <div class="arc-hud" id="arcHud-${suffix}"></div>
     </div>`;
 }
 function arcNode(base,suffix){ return document.getElementById(base+'-'+suffix); }
 
-// Fixed view, not draggable — spin stays 0 (midnight at the top, per
-// arcAngle's -90deg offset) and tilt stays the CSS default (--tilt:60deg
-// in :root). Dragging previously captured the pointer on .arc-stage, which
-// also silently ate the click a pin needed to open its edit sheet; removing
-// it fixes both the orientation drifting off 0-at-top and pin taps at once.
 let arcOverlayOpen=false;
 const arcState={
-  rail:{ built:false, pinSig:null, staticSig:null },
-  ov:  { built:false, pinSig:null, staticSig:null }
+  rail:{ built:false, sig:null, doms:[], parts:null },
+  ov:  { built:false, sig:null, doms:[], parts:null }
 };
 
-// Optional routines switched off for viewDate are already excluded by
-// activeRoutinesOn(); cat:'event' one-off entries ride along inside it too
-// (they're just ROUTINES-array rows), which is why they need no separate
-// branch here — sheetTypeFor() sorts routine vs event out by id when the
-// sheet opens.
-function arcItems(){
-  const mr=marks(state), ms=marks(suppState);
-  const routines=activeRoutinesOn(viewDate).map(r=>({
-    key:'r:'+r.id, time:r.time, name:r.title,
-    colorVar:ARC_CAT_COLOR[r.cat]||'frost', done:!!mr[r.id],
-    catLabel:LABEL[r.cat]||'Routine',
+/* ---- what each domain is made of ----
+   Only the three domains that own tickable things carry items; the rest are
+   readouts and link into their tab instead. Optional routines switched off
+   for viewDate are already excluded by activeRoutinesOn(); cat:'event'
+   one-offs ride along inside it (they are ROUTINES rows), which is why they
+   need no branch — sheetTypeFor() sorts routine vs event out by id. */
+function nxRoutineItems(){
+  const mr=marks(state);
+  return activeRoutinesOn(viewDate).map(r=>({
+    id:'r:'+r.id, time:r.time, name:r.title, done:!!mr[r.id],
     toggle:()=>{ const m=marks(state); m[r.id]=!m[r.id]; render(); },
     edit:()=>arcOpenRoutine(r.id)
   }));
-  const supps=SUPP_BLOCKS.filter(b=>b.items.length).map(b=>({
-    key:'s:'+b.id, time:b.time, name:'Supplements · '+b.title,
-    colorVar:'frost', done:b.items.every(i=>ms[i.id]),
-    catLabel:'Stack',
+}
+function nxSuppItems(){
+  const ms=marks(suppState);
+  return SUPP_BLOCKS.filter(b=>b.items.length).map(b=>({
+    id:'s:'+b.id, time:b.time, name:b.title, done:b.items.every(i=>ms[i.id]),
     toggle:()=>{ const m=marks(suppState); const all=b.items.every(i=>m[i.id]);
       b.items.forEach(i=>m[i.id]=!all); render(); },
     edit:()=>arcOpenSupp()
   }));
-  const dayKey=key(viewDate);
-  const tasks=visibleTasks().filter(t=>t.time&&t.date===dayKey).map(t=>({
-    key:'t:'+t.id, time:t.time, name:t.title||'Untitled',
-    colorVar:'amber', done:!!t.done,
-    catLabel:'Task',
-    toggle:()=>toggleTask(t.id),
-    edit:()=>arcOpenTask(t.id)
-  }));
-  return [...routines,...supps,...tasks].sort((a,b)=>a.time.localeCompare(b.time));
+}
+function nxTaskItems(){
+  const dk=key(viewDate);
+  return visibleTasks().filter(t=>t.date===dk)
+    .sort((a,b)=>(a.time||'').localeCompare(b.time||''))
+    .map(t=>({
+      id:'t:'+t.id, time:t.time||'', name:t.title||'Untitled', done:!!t.done,
+      toggle:()=>toggleTask(t.id), edit:()=>arcOpenTask(t.id)
+    }));
+}
+
+// Keyed by systemsReport()'s own key, so the two cannot drift apart: a row
+// this table does not know still renders, just without items or a link.
+const NX_META={
+  'Routine':     { items:nxRoutineItems, tab:'routine' },
+  'Supplements': { items:nxSuppItems,    tab:'supps'   },
+  fast:  { size:()=>2 },
+  tasks: { items:nxTaskItems, tab:'tasks' },
+  bio:   { tab:'bio', size:()=>PANELS.length },
+  bp:    { tab:'bio', size:()=>BP.length },
+  cal:   { tab:'cal', size:()=>SUBS.length }
+};
+
+function nxDomains(){
+  return systemsReport().map(r=>{
+    const m=NX_META[r.key]||{};
+    const items=m.items?m.items():[];
+    return {
+      key:r.key, label:r.label, state:r.state, detail:r.detail,
+      // systemsReport() computes the short form itself. Deriving it here from
+      // the sentence instead would put a second set of rules on the same
+      // numbers, and they would drift the first time either side changed.
+      val:r.val||r.detail,
+      items, tab:m.tab||null,
+      count:items.length||(m.size?m.size():1)
+    };
+  });
 }
 
 // Same activeTab-bracketing trick already used for edit-from-agenda: it's
@@ -2580,183 +2542,269 @@ function arcOpenTask(id){
   arcCloseOverlay();
   const prev=activeTab; activeTab='tasks'; openSheet('edit',id); activeTab=prev;
 }
-function arcOpenSupp(){
-  arcCloseOverlay();
-  setTab('supps');
-}
+function arcOpenSupp(){ arcCloseOverlay(); setTab('supps'); }
+function nxOpenTab(t){ arcCloseOverlay(); setTab(t); }
 
-function arcBuildStatic(suffix){
-  ['arcD1','arcD2','arcD3'].forEach(base=>{
-    const svg=arcNode(base,suffix); if(!svg) return; svg.innerHTML='';
-    svg.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:'none',stroke:'var(--ink)','stroke-width':1}));
+/* ---- build ----
+   Static furniture first (grid, perimeter ticks, gyro rings, core), then one
+   group per domain. Rebuilt only when the set of domains or their state
+   changes — see nxSig() — so ticking something repaints colours in place
+   rather than replaying the whole constellation in the always-visible rail. */
+function nxSig(doms){ return doms.map(d=>d.key+':'+d.state+':'+d.count).join(','); }
+
+function nxBuild(suffix){
+  const svg=arcNode('nxSvg',suffix); if(!svg) return;
+  const doms=nxDomains();
+  svg.innerHTML='';
+  const P={doms:[], gyro:[], sweep:null, prog:null, inner:null};
+
+  // -- ground plane: the ellipse the domains travel on, plus two fainter
+  //    ones for depth. Purely furniture; nothing here encodes data.
+  [1,0.66,0.34].forEach((k,i)=>{
+    svg.appendChild(svgEl('ellipse',{cx:NX_CX,cy:NX_CY,rx:NX_R*k,ry:NX_R*k*NX_TILT,
+      fill:'none',stroke:'var(--line)','stroke-width':1,
+      'stroke-dasharray':i?'2 7':'', opacity:i?0.55:1}));
   });
-  const plate=arcNode('arcPlate',suffix); if(!plate) return;
-  plate.innerHTML='';
-  const gradId='arcPlateGlow-'+suffix;
-  const grad=svgEl('radialGradient',{id:gradId});
-  grad.appendChild(svgEl('stop',{offset:'0%','stop-color':'#0d1822','stop-opacity':'.85'}));
-  grad.appendChild(svgEl('stop',{offset:'100%','stop-color':'#0d1822','stop-opacity':'0'}));
-  // Radar sweep gradient: transparent at the hub, faint cyan at the rim, so
-  // the wedge reads as a beam rather than a pie slice.
-  const sweepId='arcSweepGrad-'+suffix;
-  const sg=svgEl('radialGradient',{id:sweepId});
-  sg.appendChild(svgEl('stop',{offset:'0%','stop-color':'#5fd8f5','stop-opacity':'0'}));
-  sg.appendChild(svgEl('stop',{offset:'100%','stop-color':'#5fd8f5','stop-opacity':'0.20'}));
-  const defs=svgEl('defs'); defs.appendChild(grad); defs.appendChild(sg); plate.appendChild(defs);
-  plate.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:`url(#${gradId})`}));
-  // 55° wedge, spun by CSS. Sits under the ticks and the ring so it never
-  // competes with anything that carries information.
-  // Two nested groups on purpose: the outer one is translated to the hub via
-  // an SVG attribute, and the wedge inside is drawn around (0,0), so the CSS
-  // rotation needs no transform-origin and no transform-box support to spin
-  // about the right point.
-  const hub=svgEl('g',{transform:`translate(${ARC_CX},${ARC_CY})`});
-  const sweep=svgEl('g',{class:'arc-sweep'});
-  const rel=(h)=>{ const a=arcAngle(h)*Math.PI/180; return [ARC_R*Math.cos(a),ARC_R*Math.sin(a)]; };
-  const [sx,sy]=rel(0), [ex,ey]=rel(55/15);
-  sweep.appendChild(svgEl('path',{
-    d:`M 0 0 L ${sx} ${sy} A ${ARC_R} ${ARC_R} 0 0 1 ${ex} ${ey} Z`,
-    fill:`url(#${sweepId})`}));
-  hub.appendChild(sweep); plate.appendChild(hub);
-  plate.appendChild(svgEl('circle',{cx:ARC_CX,cy:ARC_CY,r:ARC_R,fill:'none',stroke:'var(--line)','stroke-width':1.5}));
-  for(let h=0;h<24;h++){
-    const major=h%6===0;
-    const [x1,y1]=arcPoint(h,ARC_R-(major?12:6)), [x2,y2]=arcPoint(h,ARC_R);
-    plate.appendChild(svgEl('line',{x1,y1,x2,y2,stroke:'var(--line)','stroke-width':major?1.8:1.2}));
-    if(major){
-      const [lx,ly]=arcPoint(h,ARC_R-30);
-      const t=svgEl('text',{x:lx,y:ly,'text-anchor':'middle','dominant-baseline':'middle',
-        fill:'var(--muted)','font-size':13,'font-weight':600,'font-family':'var(--mono)','letter-spacing':'.08em'});
-      t.textContent=String(h).padStart(2,'0');
-      plate.appendChild(t);
+  // radial spokes, every 30deg
+  for(let i=0;i<12;i++){
+    const a=i*Math.PI/6;
+    svg.appendChild(svgEl('line',{
+      x1:NX_CX+Math.cos(a)*NX_R*0.34, y1:NX_CY+Math.sin(a)*NX_R*0.34*NX_TILT,
+      x2:NX_CX+Math.cos(a)*NX_R,      y2:NX_CY+Math.sin(a)*NX_R*NX_TILT,
+      stroke:'var(--line)','stroke-width':0.6,opacity:.4}));
+  }
+  // -- perimeter ticks: instrument bezel, every 7.5deg, longer every fourth
+  for(let i=0;i<48;i++){
+    const a=i*Math.PI/24, maj=i%4===0, r1=NX_R+7, r2=NX_R+(maj?15:11);
+    svg.appendChild(svgEl('line',{
+      x1:NX_CX+Math.cos(a)*r1, y1:NX_CY+Math.sin(a)*r1*NX_TILT,
+      x2:NX_CX+Math.cos(a)*r2, y2:NX_CY+Math.sin(a)*r2*NX_TILT,
+      stroke:'var(--frost)','stroke-width':maj?1.3:0.7,opacity:maj?.45:.22}));
+  }
+
+  // -- radar sweep: one line from the hub out to the rim, following the same
+  //    ellipse as everything else so it stays in the plane.
+  P.sweep=svgEl('line',{x1:NX_CX,y1:NX_CY,stroke:'var(--frost)','stroke-width':1.2,opacity:.30});
+  svg.appendChild(P.sweep);
+
+  // -- gyro rings: a circle seen edge-on and rolling. Its MINOR AXIS is
+  //    driven rather than the whole ellipse being rotated in 2D — that is
+  //    the projection of a genuinely tumbling ring, and it is what sells the
+  //    depth. Rotating an ellipse instead just looks like a spinning oval.
+  [{r:104,a:0,sp:1},{r:118,a:62,sp:-0.72},{r:94,a:-48,sp:0.55}].forEach(g=>{
+    g.node=svgEl('ellipse',{cx:NX_CX,cy:NX_CY,rx:g.r,ry:g.r*0.3,fill:'none',
+      stroke:'var(--frost)','stroke-width':1,opacity:.18});
+    svg.appendChild(g.node); P.gyro.push(g);
+  });
+
+  // -- glow. ONE filter, on ONE element (the completion ring), which does not
+  //    move — only its dash length changes. Deliberately not applied per node:
+  //    seven blurred groups repositioned every frame is exactly the jank the
+  //    style notes warn about. Node emphasis is done with plain vector rings.
+  const defs=svgEl('defs',{});
+  const f=svgEl('filter',{id:'nxGlow-'+suffix,x:'-60%',y:'-60%',width:'220%',height:'220%'});
+  f.appendChild(svgEl('feGaussianBlur',{stdDeviation:2.6,result:'b'}));
+  const fm=svgEl('feMerge',{});
+  fm.appendChild(svgEl('feMergeNode',{in:'b'}));
+  fm.appendChild(svgEl('feMergeNode',{in:'SourceGraphic'}));
+  f.appendChild(fm); defs.appendChild(f); svg.appendChild(defs);
+
+  // -- core: completion as a ring. The percentage itself is HTML in .arc-hud
+  //    on top, where it can use real type sizes instead of scaled SVG text.
+  const CR=84, CC=2*Math.PI*CR;
+  svg.appendChild(svgEl('circle',{cx:NX_CX,cy:NX_CY,r:CR,fill:'none',
+    stroke:'rgba(95,216,245,.14)','stroke-width':3.5}));
+  P.prog=svgEl('circle',{cx:NX_CX,cy:NX_CY,r:CR,fill:'none',stroke:'var(--frost)',
+    'stroke-width':3.5,'stroke-dasharray':'0 '+CC,
+    transform:'rotate(-90 '+NX_CX+' '+NX_CY+')'});
+  P.progC=CC;
+  svg.appendChild(P.prog);
+  P.prog.setAttribute('filter','url(#nxGlow-'+suffix+')');
+  P.inner=svgEl('circle',{cx:NX_CX,cy:NX_CY,r:73,fill:'none',stroke:'var(--frost)',
+    'stroke-width':0.8,'stroke-dasharray':'1 6',opacity:.45});
+  svg.appendChild(P.inner);
+  // Bezel: four bracket arcs at the diagonals, and a ring of fine ticks that
+  // turns against the inner dashes. Instrument housing, not data — it is what
+  // makes the core read as a gauge rather than a pie chart.
+  [45,135,225,315].forEach(deg=>{
+    const a0=(deg-15)*Math.PI/180, a1=(deg+15)*Math.PI/180, br=96;
+    svg.appendChild(svgEl('path',{d:'M '+(NX_CX+Math.cos(a0)*br)+' '+(NX_CY+Math.sin(a0)*br)+
+      ' A '+br+' '+br+' 0 0 1 '+(NX_CX+Math.cos(a1)*br)+' '+(NX_CY+Math.sin(a1)*br),
+      fill:'none',stroke:'var(--frost)','stroke-width':2,opacity:.5,'stroke-linecap':'round'}));
+  });
+  P.bezel=svgEl('circle',{cx:NX_CX,cy:NX_CY,r:101,fill:'none',stroke:'var(--frost)',
+    'stroke-width':3,'stroke-dasharray':'1.2 9',opacity:.28});
+  svg.appendChild(P.bezel);
+
+  // -- domains
+  doms.forEach((d,i)=>{
+    const col='var('+NX_STATE_COLOR[d.state]+')';
+    const rad=9+Math.min(d.count,8)*0.85;
+    const o={d, col, rad, phase:i/doms.length};
+
+    o.link=svgEl('line',{x1:NX_CX,y1:NX_CY,stroke:col,'stroke-width':1,opacity:.20});
+    svg.appendChild(o.link);
+
+    const g=svgEl('g',{class:'nx-node',tabindex:0,role:'button'});
+    g.setAttribute('aria-label',d.label+', '+d.detail);
+    o.sats=[];
+    const satG=svgEl('g',{}); g.appendChild(satG);
+    for(let j=0;j<Math.min(d.count,6);j++){
+      const s={ph:j/Math.min(d.count,6), node:svgEl('circle',{r:2.4,fill:col,opacity:.6})};
+      satG.appendChild(s.node); o.sats.push(s);
     }
-  }
-  const fast=svgEl('path',{d:arcArcPath(EAT_END,EAT_START+24,ARC_R),fill:'none',
-    stroke:'var(--rose)','stroke-width':4,'stroke-linecap':'round',opacity:.3});
-  fast.classList.add('arc-draw'); fast.style.setProperty('--arc-len',2*Math.PI*ARC_R);
-  plate.appendChild(fast);
-  // Placeholder now-hand — arcUpdateNowLine() moves/shows it every refresh
-  // without touching the rest of the plate.
-  plate.appendChild(svgEl('line',{id:'arcNowLine-'+suffix,x1:ARC_CX,y1:ARC_CY,x2:ARC_CX,y2:ARC_CY,
-    stroke:'var(--rose)','stroke-width':2,'stroke-linecap':'round',opacity:.9}));
-  plate.appendChild(svgEl('circle',{id:'arcNowDot-'+suffix,cx:ARC_CX,cy:ARC_CY,r:5,fill:'var(--rose)'}));
+    o.halo=svgEl('circle',{class:'nx-halo',fill:col,opacity:.12});
+    // Targeting reticle — only drawn for the selected domain, and it turns,
+    // which is the one place a little theatre costs nothing.
+    o.ret =svgEl('circle',{fill:'none',stroke:'var(--frost)','stroke-width':1.3,
+      'stroke-dasharray':'4 7',opacity:0});
+    o.ring2=svgEl('circle',{fill:'none',stroke:col,'stroke-width':0.8,opacity:.38});
+    o.ring=svgEl('circle',{class:'nx-ring',fill:'rgba(6,11,16,.85)',stroke:col,'stroke-width':2});
+    o.dot =svgEl('circle',{fill:col});
+    // Hit area far wider than the drawing. The old dial's 17px dots were the
+    // single most-reported annoyance on the phone; this is the fix.
+    o.hit =svgEl('circle',{class:'nx-hit'});
+    [o.halo,o.ret,o.ring2,o.ring,o.dot,o.hit].forEach(n=>g.appendChild(n));
+    o.lab=svgEl('text',{class:'nx-lab','font-size':10.5,'letter-spacing':1.1,fill:'var(--muted)'});
+    o.lab.textContent=d.label.toUpperCase();
+    o.val=svgEl('text',{class:'nx-val','font-size':11.5,'font-weight':600,fill:'var(--ink)'});
+    o.val.textContent=d.val;
+    g.appendChild(o.lab); g.appendChild(o.val);
 
-  const band=arcNode('arcBand',suffix); if(band){
-    band.innerHTML='';
-    // Mark II: the eating band is the brightest thing on the ring, so it
-    // carries the bloom. An SVG blur-and-merge filter rather than a CSS
-    // box-shadow, which does nothing useful on a stroked path.
-    const fId='arcBandGlow-'+suffix;
-    const bDefs=svgEl('defs');
-    const f=svgEl('filter',{id:fId,x:'-50%',y:'-50%',width:'200%',height:'200%'});
-    f.appendChild(svgEl('feGaussianBlur',{stdDeviation:3.5,result:'b'}));
-    const merge=svgEl('feMerge');
-    merge.appendChild(svgEl('feMergeNode',{in:'b'}));
-    merge.appendChild(svgEl('feMergeNode',{in:'SourceGraphic'}));
-    f.appendChild(merge); bDefs.appendChild(f); band.appendChild(bDefs);
-    const eat=svgEl('path',{d:arcArcPath(EAT_START,EAT_END,ARC_R),fill:'none',
-      stroke:'var(--moss)','stroke-width':8,'stroke-linecap':'round',filter:`url(#${fId})`});
-    eat.classList.add('arc-draw'); eat.style.setProperty('--arc-len',2*Math.PI*ARC_R);
-    band.appendChild(eat);
-  }
-  arcState[suffix].staticSig=EAT_START+'|'+EAT_END;
+    g.addEventListener('click',e=>{ e.stopPropagation(); arcSelect(d.key); });
+    g.addEventListener('keydown',e=>{
+      if(e.key==='Enter'||e.key===' '){ e.preventDefault(); arcSelect(d.key); } });
+    o.g=g; svg.appendChild(g);
+    P.doms.push(o);
+  });
+
+  arcState[suffix].parts=P;
+  arcState[suffix].doms=doms;
+  arcState[suffix].sig=nxSig(doms);
 }
 
-// Items close together in time land at nearly the same point on the ring —
-// their dots (and expanded tap zones) stack directly on top of each other,
-// so whichever renders last always wins the tap and the rest become
-// unreachable. Fans clustered items out across a few different radii
-// instead of leaving them all at ARC_R.
-function arcDeclutter(items){
-  const CLUSTER_DEG=9, STEP=26;
-  const sorted=[...items].sort((a,b)=>hhmmHours(a.time)-hhmmHours(b.time));
-  const clusters=[];
-  sorted.forEach(it=>{
-    const h=hhmmHours(it.time), last=clusters[clusters.length-1];
-    if(last && (h-last.h)*15<=CLUSTER_DEG){ last.items.push(it); last.h=h; }
-    else clusters.push({h,items:[it]});
+// The value under a node is the one thing that changes WITHOUT changing the
+// signature: ticking a supplement block moves 0/11 to 2/11 while the domain,
+// its state and its item count all stay put. Without this the node kept
+// showing the number it was built with while the card beside it showed the
+// truth.
+function nxSyncText(suffix,doms){
+  const P=arcState[suffix].parts; if(!P) return;
+  P.doms.forEach((o,i)=>{
+    const d=doms[i]; if(!d||d.key!==o.d.key) return;
+    if(d.val!==o.d.val) o.val.textContent=d.val;
+    o.d=d;
   });
+}
+
+/* ---- per-frame placement ---- */
+function nxPlace(suffix,t){
+  const P=arcState[suffix].parts; if(!P) return;
+
+  P.gyro.forEach(g=>{
+    const k=Math.cos(t/9000*g.sp+g.a);
+    g.node.setAttribute('ry',Math.max(3,Math.abs(k)*g.r).toFixed(1));
+    g.node.setAttribute('transform','rotate('+(g.a*20+t/26000*g.sp*57).toFixed(2)+' '+NX_CX+' '+NX_CY+')');
+    g.node.setAttribute('opacity',(0.09+Math.abs(k)*0.15).toFixed(3));
+  });
+
+  P.bezel.setAttribute('transform','rotate('+(t/70000*360).toFixed(2)+' '+NX_CX+' '+NX_CY+')');
+  const sa=t/16000*Math.PI*2;
+  P.sweep.setAttribute('x2',(NX_CX+Math.cos(sa)*NX_R).toFixed(2));
+  P.sweep.setAttribute('y2',(NX_CY+Math.sin(sa)*NX_R*NX_TILT).toFixed(2));
+  P.inner.setAttribute('transform','rotate('+(-t/40000*360).toFixed(2)+' '+NX_CX+' '+NX_CY+')');
+
+  const pct=arcCompletionPct().pct;
+  P.prog.setAttribute('stroke-dasharray',(P.progC*pct/100).toFixed(1)+' '+P.progC);
+
+  P.doms.forEach(o=>{
+    const a=(t/NX_TURN+o.phase)*Math.PI*2;
+    const x=NX_CX+Math.cos(a)*NX_R, y=NX_CY+Math.sin(a)*NX_R*NX_TILT;
+    const depth=(Math.sin(a)+1)/2;                 // 0 = far side, 1 = nearest
+    const s=0.68+depth*0.38, sel=arcSelected===o.d.key;
+
+    o.g.setAttribute('transform','translate('+x.toFixed(2)+','+y.toFixed(2)+')');
+    o.g.setAttribute('opacity',(arcSelected&&!sel ? (0.48+depth*0.52)*0.42
+                                                  : 0.48+depth*0.52).toFixed(3));
+    o.halo.setAttribute('r',((o.rad+11)*s).toFixed(2));
+    o.halo.setAttribute('opacity',sel?0.34:0.12);
+    o.ring.setAttribute('r',(o.rad*s).toFixed(2));
+    o.ring.setAttribute('stroke-width',sel?3:2);
+    o.ring2.setAttribute('r',(o.rad*s+4.5).toFixed(2));
+    o.ret.setAttribute('r',(o.rad*s+10).toFixed(2));
+    o.ret.setAttribute('opacity',sel?0.85:0);
+    if(sel) o.ret.setAttribute('transform','rotate('+(t/3500*360).toFixed(2)+')');
+    o.dot .setAttribute('r',(o.rad*0.38*s).toFixed(2));
+    o.hit .setAttribute('r',(o.rad*s+22).toFixed(2));
+    o.link.setAttribute('x2',x.toFixed(2));
+    o.link.setAttribute('y2',y.toFixed(2));
+    o.link.setAttribute('opacity',(sel?0.5:0.10+depth*0.20).toFixed(3));
+
+    /* Labels flip with position: to the side at the ellipse's flanks, stacked
+       when the node is near the top or bottom, where a side label would run
+       into its neighbour. Stacked labels go on the side facing AWAY from the
+       core, or a node crossing the top writes straight over the percentage. */
+    const c=Math.cos(a), off=o.rad*s+9;
+    if(Math.abs(c)<0.42){
+      const below=Math.sin(a)>0;
+      o.lab.setAttribute('text-anchor','middle'); o.val.setAttribute('text-anchor','middle');
+      o.lab.setAttribute('x',0); o.lab.setAttribute('y',below?off+11:-off-14);
+      o.val.setAttribute('x',0); o.val.setAttribute('y',below?off+23:-off-2);
+    } else {
+      const right=c>0, ax=right?off:-off;
+      o.lab.setAttribute('text-anchor',right?'start':'end');
+      o.val.setAttribute('text-anchor',right?'start':'end');
+      o.lab.setAttribute('x',ax); o.lab.setAttribute('y',-1);
+      o.val.setAttribute('x',ax); o.val.setAttribute('y',11);
+    }
+
+    o.sats.forEach(sn=>{
+      const b=(t/NX_SAT_TURN+sn.ph)*Math.PI*2+o.phase*3, sr=(o.rad+13)*s;
+      sn.node.setAttribute('cx',(Math.cos(b)*sr).toFixed(2));
+      sn.node.setAttribute('cy',(Math.sin(b)*sr*NX_TILT).toFixed(2));
+      sn.node.setAttribute('opacity',(0.26+((Math.sin(b)+1)/2)*0.5).toFixed(3));
+    });
+  });
+}
+
+/* ---- the loop ----
+   One rAF for both instances. Throttled to ~30fps and stopped outright when
+   the tab is hidden or nothing is on screen: the rail copy is visible for a
+   whole desktop session, and an unthrottled always-on rAF there is a real
+   battery cost for motion nobody is watching.
+   Selecting a domain freezes the orbit — otherwise what you just tapped
+   drifts out from under your thumb while you read its card. */
+const NX_REDUCED=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let nxT0=performance.now(), nxFrozen=null, nxLast=0, nxRaf=null;
+
+function nxNow(){
+  if(NX_REDUCED) return NX_TURN*0.13;      // a laid-out constellation, never advancing
+  if(nxFrozen!==null) return nxFrozen;
+  return performance.now()-nxT0;
+}
+function nxLive(){
+  if(document.hidden) return [];
   const out=[];
-  clusters.forEach(cl=>{
-    const n=cl.items.length;
-    cl.items.forEach((it,i)=>out.push({...it, radius:ARC_R+(i-(n-1)/2)*STEP}));
-  });
+  if(isDesktopLayout() && arcState.rail.built) out.push('rail');
+  if(arcOverlayOpen && arcState.ov.built) out.push('ov');
   return out;
 }
-
-function arcBuildPins(suffix,items){
-  const pinsBox=arcNode('arcPins',suffix), stage=arcNode('arcStage',suffix);
-  if(!pinsBox||!stage) return;
-  pinsBox.innerHTML='';
-  const s=stage.clientWidth/400||0.6, oy=(stage.clientHeight-400*s)/2;
-  arcDeclutter(items).forEach((it,i)=>{
-    const [x,y]=arcPoint(hhmmHours(it.time),it.radius);
-    const height=26+(it.done?10:0);
-
-    const p=document.createElement('div');
-    p.className='arc-pin'; p.dataset.key=it.key;
-    p.style.left=(x*s)+'px'; p.style.top=(y*s+oy)+'px';
-    p.style.color=`var(--${it.colorVar})`;
-
-    const stem=document.createElement('div');
-    stem.className='arc-stem'; stem.style.height=height+'px';
-    stem.style.animationDelay=(1.1+i*0.05)+'s';
-
-    const dot=document.createElement('div');
-    dot.className='arc-head-dot'+(it.done?' done':'');
-    dot.style.bottom=(height-8.5)+'px';   // half the dot's 17px height, centers it on the stem tip
-    dot.style.animationDelay=(1.15+i*0.05)+'s';
-    dot.setAttribute('role','button'); dot.setAttribute('tabindex','0');
-    dot.setAttribute('aria-label',it.time+' '+it.name);
-    // No click handler on the dot itself — arcAttachTap() below owns pointer
-    // selection for the whole stage and picks the NEAREST node, which beats
-    // per-element hit boxes here (see the note there). Keyboard still
-    // activates the focused dot directly.
-    dot.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); arcSelect(it.key); } };
-
-    const tag=document.createElement('div');
-    tag.className='arc-tag'+(x>ARC_CX?' flip':''); tag.textContent=it.time+'  '+it.name;
-    tag.style.bottom=(height-9)+'px';
-
-    p.append(stem,dot,tag);
-    pinsBox.appendChild(p);
-  });
-  arcState[suffix].pinSig=items.map(it=>it.key+it.time).join(',');
-  arcAttachTap(suffix);
+function nxFrame(now){
+  nxRaf=null;
+  const live=nxLive();
+  if(!live.length) return;                 // restarted by nxKick() when one appears
+  if(now-nxLast>33){ nxLast=now; const t=nxNow(); live.forEach(s=>nxPlace(s,t)); }
+  if(!NX_REDUCED && nxFrozen===null) nxRaf=requestAnimationFrame(nxFrame);
 }
-
-/* Nearest-node selection for the whole stage.
-   Per-element hit boxes cannot win here: the node heads render about 17x10
-   after the disc's tilt, and padding them out far enough to be thumb-sized
-   makes each one cover its neighbours — measured, a generous pad dropped
-   dead-centre accuracy from 13/13 to 5/13, because whichever pad is painted
-   last wins the point. Picking the nearest centre instead gives an
-   arbitrarily large catch radius with correct nearest-wins behaviour and no
-   overlap to arbitrate. Bound once per stage; the listener survives pin
-   rebuilds because it reads the pin list at click time. */
-const ARC_TAP_RADIUS=52;
-function arcAttachTap(suffix){
-  const stage=arcNode('arcStage',suffix);
-  if(!stage||stage.dataset.tapBound) return;
-  stage.dataset.tapBound='1';
-  stage.addEventListener('click',e=>{
-    const pinsBox=arcNode('arcPins',suffix); if(!pinsBox) return;
-    let bestKey=null, bestD=Infinity;
-    [...pinsBox.children].forEach(p=>{
-      const dot=p.querySelector('.arc-head-dot'); if(!dot) return;
-      const b=dot.getBoundingClientRect();
-      const d=Math.hypot(e.clientX-(b.left+b.width/2), e.clientY-(b.top+b.height/2));
-      if(d<bestD){ bestD=d; bestKey=p.dataset.key; }
-    });
-    if(bestKey && bestD<=ARC_TAP_RADIUS) arcSelect(bestKey);
-    else arcClearSelection();   // tapping empty dial dismisses the readout
-  });
+function nxKick(){
+  const live=nxLive();
+  if(!live.length) return;
+  const t=nxNow(); live.forEach(s=>nxPlace(s,t));   // paint once even when frozen
+  if(!NX_REDUCED && nxFrozen===null && nxRaf===null) nxRaf=requestAnimationFrame(nxFrame);
 }
+document.addEventListener('visibilitychange',nxKick);
 
-// Same formula as the status block's own #pct (renderProgress()'s default
-// branch: routines + individual supplement items, no tasks) — not the pin
-// list, which also carries supplement *blocks* and tasks and would give a
-// different number than the header the arc sits right next to.
+/* ---- day summary in the middle ---- */
 function arcCompletionPct(){
   const mr=marks(state), ms=marks(suppState);
   const vr=activeRoutinesOn(viewDate), vs=allSupps();
@@ -2764,111 +2812,101 @@ function arcCompletionPct(){
   const done=vr.filter(r=>mr[r.id]).length+vs.filter(s=>ms[s.id]).length;
   return {total,done,pct:total?Math.round(done/total*100):0};
 }
-
-// The next still-open item on the ring, which is the one thing a glance at
-// the day is usually looking for. Only meaningful for today.
+// The next still-open timed thing. No longer drawn in the middle of the
+// constellation — it is the briefing that needs it (bootLines() and
+// briefingSpeech() both open on "next up"), which is why it outlived the
+// HUD row it used to fill.
 function arcNextUp(){
   if(!sameDay(viewDate,new Date())) return null;
   const now=new Date(), h=now.getHours()+now.getMinutes()/60;
-  return arcItems().find(it=>!it.done && hhmmHours(it.time)>=h) || null;
+  return [...nxRoutineItems(),...nxSuppItems(),...nxTaskItems()]
+    .filter(i=>i.time&&!i.done&&hhmmHours(i.time)>=h)
+    .sort((a,b)=>a.time.localeCompare(b.time))[0]||null;
 }
 
+// Deliberately just the headline. Everything this used to carry is already on
+// screen and was fighting the drawing for the middle of the core ring: the
+// eating countdown is its own node, "12/20 done" is what the percentage says,
+// and what is coming next is the scheduled strip above the stage. At 390px
+// the ring is ~130px across and none of it fitted anyway.
 function arcHudHTML(){
-  const {total,done,pct}=arcCompletionPct();
-  const isToday=sameDay(viewDate,new Date());
-  const nx=arcNextUp();
-  const nextRow=nx
-    ? `<div class="arc-next"><span class="nt">${esc(nx.time)}</span><span class="nn">${esc(nx.name)}</span></div>`
-    : '';
-  if(isToday){
-    const now=new Date(), st=eatingState(now);
-    const leftLbl=st.left.toFixed(1).replace('.0','')+'H';
-    return `<div class="arc-cap">Today</div>
-      <div class="arc-pct">${pct}%</div>
-      <div class="arc-state" style="color:${st.mode==='eating'?'var(--moss)':'var(--rose)'}">
-        ${st.mode==='eating'?'EATING · '+leftLbl+' LEFT':'FASTING'}</div>
-      <div class="arc-clock">${done}/${total} done</div>${nextRow}`;
-  }
-  const lbl=viewDate.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
-  return `<div class="arc-cap">${esc(lbl)}</div>
-    <div class="arc-pct">${pct}%</div>
-    <div class="arc-state" style="color:var(--muted)">COMPLETION</div>
-    <div class="arc-clock">${done}/${total} done</div>`;
+  const {pct}=arcCompletionPct();
+  const lbl=sameDay(viewDate,new Date()) ? 'Today'
+    : viewDate.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+  return `<div class="arc-cap">${esc(lbl)}</div><div class="arc-pct">${pct}%</div>`;
+}
+function arcRenderCentre(suffix){
+  const hud=arcNode('arcHud',suffix); if(hud) hud.innerHTML=arcHudHTML();
 }
 
-/* ---- node selection & detail card ----
-   arcSelected holds a pin key. Everything reads through arcItems() rather
-   than caching the item, so a toggle elsewhere (or a re-render) keeps the
-   card truthful instead of showing a stale done-state.
-   The centre of the ring now always shows the day summary; detail lives in
-   the card outside the disc, where it can use readable type. */
+/* ---- selection & detail card ----
+   arcSelected holds a DOMAIN key. Everything reads back through nxDomains()
+   rather than caching, so a tick elsewhere (or any re-render) keeps the card
+   truthful instead of showing a stale done-state. */
 let arcSelected=null;
 
-// A tap on a rail node expands to the overlay first: at 240px the rail arc
+// A tap on a rail node expands to the overlay first: at 292px the rail copy
 // is a summary, and its detail card has nowhere to live.
 function arcSelect(k){
   arcSelected=(arcSelected===k)?null:k;
+  nxFreeze();
   if(arcSelected!==null && !arcOverlayOpen){ arcOpenOverlay(); return; }
-  arcRenderDetail(); arcMarkSelected();
+  arcRenderDetail(); nxKick();
 }
 function arcClearSelection(){
   if(arcSelected===null) return;
-  arcSelected=null; arcRenderDetail(); arcMarkSelected();
+  arcSelected=null; nxFreeze(); arcRenderDetail(); nxKick();
 }
-function arcSelectedItem(){
-  return arcSelected ? arcItems().find(it=>it.key===arcSelected)||null : null;
+// Freezing keeps the clock where it stopped and resumes from there, so
+// clearing a selection does not make the constellation jump.
+function nxFreeze(){
+  if(arcSelected!==null){ if(nxFrozen===null) nxFrozen=performance.now()-nxT0; }
+  else if(nxFrozen!==null){ nxT0=performance.now()-nxFrozen; nxFrozen=null; }
 }
-// toggle() calls render(), which reaches arcRefresh() and repaints the ring
-// and this card together.
-function arcDetailToggle(){ const it=arcSelectedItem(); if(it) it.toggle(); }
-function arcDetailEdit(){ const it=arcSelectedItem(); if(it) it.edit(); }
+function nxSelected(){
+  return arcSelected ? nxDomains().find(d=>d.key===arcSelected)||null : null;
+}
+function nxItem(id){
+  const d=nxSelected(); return d? d.items.find(i=>i.id===id)||null : null;
+}
+function nxItemToggle(id){ const i=nxItem(id); if(i) i.toggle(); }
+function nxItemEdit(id){ const i=nxItem(id); if(i) i.edit(); }
 
 function arcRenderDetail(){
   const box=document.getElementById('arcDetail'); if(!box) return;
-  const it=arcSelectedItem();
-  if(!it){
-    box.innerHTML='<div class="arc-d-hint">Tap a node for details</div>';
-    return;
-  }
+  const d=nxSelected();
+  if(!d){ box.innerHTML='<div class="arc-d-hint">Tap a domain for details</div>'; return; }
+  const col='var('+NX_STATE_COLOR[d.state]+')';
+  const stateLbl={ok:'Nominal',watch:'Watch',warn:'Attention'}[d.state];
+  const rows=d.items.map(i=>`
+    <div class="nx-i-row${i.done?' done':''}">
+      <button class="nx-i-tick" onclick="nxItemToggle('${esc(i.id)}')"
+        aria-label="${i.done?'Undo':'Mark done'} ${esc(i.name)}">${i.done?'✓':''}</button>
+      <span class="nx-i-time">${esc(i.time||'—')}</span>
+      <span class="nx-i-name">${esc(i.name)}</span>
+      <button class="nx-i-edit" onclick="nxItemEdit('${esc(i.id)}')"
+        aria-label="Edit ${esc(i.name)}">✎</button>
+    </div>`).join('');
   box.innerHTML=`<div class="arc-d-card">
     <button class="arc-d-close" onclick="arcClearSelection()" aria-label="Close details">✕</button>
     <div class="arc-d-top">
-      <span class="arc-d-time">${esc(it.time)}</span>
-      <span class="arc-d-status${it.done?' on':''}">${it.done?'Done':'Pending'}</span>
+      <span class="arc-d-time" style="color:${col}">${esc(d.val)}</span>
+      <span class="arc-d-status${d.state==='ok'?' on':''}">${stateLbl}</span>
     </div>
-    <div class="arc-d-name">${esc(it.name)}</div>
-    <div class="arc-d-meta">
-      <span class="arc-d-tag" style="color:var(--${it.colorVar})">${esc(it.catLabel)}</span>
-    </div>
-    <div class="arc-d-acts">
-      <button class="pri${it.done?' undo':''}" onclick="arcDetailToggle()">${it.done?'↺ Undo':'✓ Done'}</button>
-      <button onclick="arcDetailEdit()">Edit</button>
-    </div>
+    <div class="arc-d-name">${esc(d.label)}</div>
+    <div class="arc-d-meta"><span class="arc-d-tag" style="color:${col}">${esc(d.detail)}</span></div>
+    ${rows?`<div class="nx-items">${rows}</div>`:''}
+    ${d.tab?`<div class="arc-d-acts">
+      <button class="pri" onclick="nxOpenTab('${d.tab}')">Open ${esc(TAB_LABEL[d.tab]||d.tab)} →</button>
+    </div>`:''}
   </div>`;
 }
+const TAB_LABEL={routine:'Routine',supps:'Supps',tasks:'Tasks',cal:'Calendar',bio:'Bio'};
 
-// Lock-on ring, applied across whichever instances are currently built.
-function arcMarkSelected(){
-  ['rail','ov'].forEach(s=>{
-    if(!arcState[s].built) return;
-    const stage=arcNode('arcStage',s);
-    if(stage) stage.classList.toggle('has-sel', arcSelected!==null);
-    const pinsBox=arcNode('arcPins',s); if(!pinsBox) return;
-    [...pinsBox.children].forEach(p=>
-      p.classList.toggle('sel', arcSelected!==null && p.dataset.key===arcSelected));
-  });
-}
-
-function arcRenderCentre(suffix){
-  const hud=arcNode('arcHud',suffix); if(!hud) return;
-  hud.innerHTML=arcHudHTML();
-}
-
-// Mobile overlay only — the desktop rail already has its own "Due today"
-// list in the right rail (renderRail()), so this doesn't need a suffix
-// param. All tasks scheduled for viewDate, timed or not: the arc's pins
-// only carry the timed ones (they need an hour to place them on the ring),
-// so untimed scheduled tasks had nowhere else to show up in this view.
+/* ---- scheduled strip above the constellation ----
+   Mobile overlay only — the desktop rail already has its own "Due today"
+   list (renderRail()). This is also what carries the day's actual times now
+   that the dial is gone, so it is not decoration: it is the "when". */
 function arcRenderTaskList(){
   const box=document.getElementById('arcTaskList');
   if(!box) return;
@@ -2896,66 +2934,27 @@ function arcRenderTaskList(){
   box.querySelectorAll('[data-id]').forEach(b=>{ b.onclick=()=>arcOpenTask(b.dataset.id); });
 }
 
-function arcUpdateNowLine(suffix){
-  const line=document.getElementById('arcNowLine-'+suffix), dot=document.getElementById('arcNowDot-'+suffix);
-  if(!line||!dot) return;
-  const isToday=sameDay(viewDate,new Date());
-  line.style.display=isToday?'':'none'; dot.style.display=isToday?'':'none';
-  if(!isToday) return;
-  const now=new Date(), [nx,ny]=arcPoint(now.getHours()+now.getMinutes()/60,ARC_R);
-  line.setAttribute('x2',nx); line.setAttribute('y2',ny);
-  dot.setAttribute('cx',nx); dot.setAttribute('cy',ny);
-}
-
-// Rebuilds only what changed since the last call: the static rings/plate/
-// band redraw if the eating window was edited, pins redraw (with their
-// entrance animation) only if the actual set/order of items differs —
-// ticking a routine changes done-state in place instead, so the always-
-// visible desktop rail never replays its entrance on every tick.
+/* ---- drivers ---- */
 function arcRefresh(suffix){
-  const st=arcState[suffix], items=arcItems();
-  const staticSig=EAT_START+'|'+EAT_END;
-  if(staticSig!==st.staticSig) arcBuildStatic(suffix);
-  const pinSig=items.map(it=>it.key+it.time).join(',');
-  if(pinSig!==st.pinSig){
-    arcBuildPins(suffix,items);
-  } else {
-    const pinsBox=arcNode('arcPins',suffix);
-    if(pinsBox) [...pinsBox.children].forEach((p,i)=>{
-      const it=items[i]; if(!it) return;
-      const height=26+(it.done?10:0);
-      const dot=p.querySelector('.arc-head-dot'); if(dot) dot.classList.toggle('done',!!it.done);
-      const stem=p.querySelector('.arc-stem'); if(stem) stem.style.height=height+'px';
-      if(dot) dot.style.bottom=(height-8.5)+'px';
-      const tag=p.querySelector('.arc-tag'); if(tag) tag.style.bottom=(height-9)+'px';
-    });
-  }
-  arcUpdateNowLine(suffix);
+  // Rebuild only when the constellation itself changed — a domain appearing,
+  // a state flipping, a count moving. Ticking one routine of seventeen does
+  // none of those, and rebuilding on every render would restart the orbit.
+  const doms=nxDomains();
+  if(nxSig(doms)!==arcState[suffix].sig) nxBuild(suffix);
+  else nxSyncText(suffix,doms);
   arcRenderCentre(suffix);
   if(suffix==='ov'){ arcRenderTaskList(); arcRenderDetail(); }
-  arcMarkSelected();
+  nxKick();
 }
-
 function arcBuildFull(suffix){
-  const disc=arcNode('arcDisc',suffix);
-  if(disc && arcState[suffix].built){
-    // Force the settle animation to replay — it only runs once per element
-    // otherwise, and a mobile re-open should feel like a fresh entrance.
-    disc.style.animation='none'; void disc.offsetWidth; disc.style.animation='';
-  }
-  arcBuildStatic(suffix);
-  const items=arcItems();
-  arcBuildPins(suffix,items);
-  arcUpdateNowLine(suffix);
+  nxBuild(suffix);
   arcRenderCentre(suffix);
   if(suffix==='ov'){ arcRenderTaskList(); arcRenderDetail(); }
-  arcMarkSelected();
   arcState[suffix].built=true;
+  nxKick();
 }
-
-// Desktop: build once, then just refresh in place on every render(). Mobile:
-// only does anything while the overlay is open (arcOpenOverlay() does the
-// initial full build itself).
+// Desktop: build once, then refresh in place on every render(). Mobile: only
+// does anything while the overlay is open (arcOpenOverlay does the build).
 function renderArc(){
   document.getElementById('progWrap').tabIndex=isDesktopLayout()?-1:0;
   if(isDesktopLayout()){
@@ -2964,18 +2963,16 @@ function renderArc(){
     arcRefresh('ov');
   }
 }
-// Lightweight per-minute tick (now-hand + HUD clock only) for whichever
-// instance is actually on screen, mirroring updateNowLine()'s own interval.
+// Per-minute tick: the summary carries a clock and an eating countdown, and
+// next-up rolls over. The constellation itself is driven by nxFrame().
 function arcTick(){
   const suffix=isDesktopLayout()?'rail':(arcOverlayOpen?'ov':null);
   if(!suffix||!arcState[suffix].built) return;
-  arcUpdateNowLine(suffix);
   arcRenderCentre(suffix);
 }
-function arcOnResize(){
-  if(isDesktopLayout()){ if(arcState.rail.built) arcBuildPins('rail',arcItems()); }
-  else if(arcOverlayOpen){ arcBuildPins('ov',arcItems()); }
-}
+// The SVG scales with its viewBox, so nothing needs re-measuring — but
+// crossing the 900px boundary changes which instance is live.
+function arcOnResize(){ renderArc(); nxKick(); }
 
 function arcBlockTap(){
   if(isDesktopLayout()) return;   // inert there — the arc is already inline in the rail
@@ -2998,9 +2995,10 @@ function arcCloseOverlay(){
   if(!arcOverlayOpen) return;
   arcOverlayOpen=false;
   arcSelected=null;   // reopen on the day summary, not on whatever was last tapped
+  nxFreeze();         // ...which also releases the orbit the selection froze
   document.getElementById('arcOverlay').classList.remove('open');
   document.body.style.overflow='';
-  arcMarkSelected();  // clear the lock-on ring left on the rail copy
+  nxKick();           // clear the lock-on left on the rail copy
 }
 function arcOverlayTap(e){
   if(e.target.id==='arcOverlay') arcCloseOverlay();   // tap outside the stage/close button
@@ -3022,7 +3020,7 @@ document.getElementById('arcOvStageHost').innerHTML=arcStageHTML('ov');
 // tapping one still selects (arcSelect then expands with it selected).
 document.getElementById('arcRailWrap').addEventListener('click',e=>{
   if(arcOverlayOpen) return;
-  if(e.target.closest('.arc-head-dot,.arc-expand')) return;
+  if(e.target.closest('.nx-node,.arc-expand')) return;
   arcOpenOverlay();
 });
 
@@ -3344,10 +3342,10 @@ function systemsReport(){
   // Same shape for both rows, so they cannot drift apart.
   const timeState=(label,items,doneOf,openYesterday,noneText,unit)=>{
     const total=items.length;
-    if(!total){ out.push({key:label,label,detail:noneText,state:'ok'}); return; }
+    if(!total){ out.push({key:label,label,detail:noneText,val:'—',state:'ok'}); return; }
     const done=items.filter(doneOf).length;
     if(!isToday){
-      out.push({key:label,label,detail:done+'/'+total+' '+unit,
+      out.push({key:label,label,detail:done+'/'+total+' '+unit,val:done+'/'+total,
         state:done===total?'ok':'watch'});
       return;
     }
@@ -3355,7 +3353,7 @@ function systemsReport(){
     const detail = openYesterday ? openYesterday+' open from yesterday'
       : duePast ? duePast+' past due · '+done+'/'+total
       : done===total ? 'all '+unit : done+'/'+total+' '+unit+' · on track';
-    out.push({key:label,label,detail,
+    out.push({key:label,label,detail,val:done+'/'+total,
       state: openYesterday?'warn' : duePast?'watch' : 'ok'});
   };
 
@@ -3373,8 +3371,11 @@ function systemsReport(){
   // Only meaningful for today — a past or future day has no "now" to be in.
   if(sameDay(viewDate,new Date())){
     const st=eatingState(new Date());
+    // Short form is deliberately compact: it is drawn under a node, where a
+    // full sentence collides with its neighbour.
     out.push({key:'fast', label:st.mode==='eating'?'Eating window':'Fasting',
       detail:hm(st.left)+(st.mode==='eating'?' remaining':' until window opens'),
+      val:Math.floor(st.left)+'h '+Math.round(st.left%1*60)+'m',
       state:'ok'});
   }
 
@@ -3382,6 +3383,7 @@ function systemsReport(){
   const dueToday=visibleTasks().filter(t=>!t.done&&t.date===key(viewDate)).length;
   out.push({key:'tasks', label:'Tasks',
     detail: overdue?overdue+' overdue' : dueToday?dueToday+' due today' : 'clear',
+    val: overdue?overdue+' overdue' : dueToday?dueToday+' due' : 'clear',
     state: overdue?'warn' : dueToday?'watch' : 'ok'});
 
   // Days since the newest panel. PANELS is date-sorted, so the last is newest.
@@ -3389,10 +3391,11 @@ function systemsReport(){
     const last=PANELS[PANELS.length-1];
     const days=Math.floor((dayStart(new Date())-dayStart(parseDay(last.date)))/86400000);
     out.push({key:'bio', label:'Biomarkers',
-      detail:days+' day'+(days===1?'':'s')+' since panel',
+      detail:days+' day'+(days===1?'':'s')+' since panel', val:days+'d',
       state: days>240?'warn' : days>180?'watch' : 'ok'});
   } else {
-    out.push({key:'bio', label:'Biomarkers', detail:'no panel on file', state:'watch'});
+    out.push({key:'bio', label:'Biomarkers', detail:'no panel on file',
+      val:'none', state:'watch'});
   }
 
   if(BP.length){
@@ -3400,6 +3403,7 @@ function systemsReport(){
     const b=bpBand(bpLatest());
     out.push({key:'bp', label:'Blood pressure',
       detail:bpLatest().sys+'/'+bpLatest().dia+' · '+(days===0?'today':days+'d ago'),
+      val:bpLatest().sys+'/'+bpLatest().dia,
       state: b.cls==='high'?'warn' : b.cls==='ok'?'ok':'watch'});
   }
 
@@ -3407,6 +3411,7 @@ function systemsReport(){
     const bad=SUBS.filter(s=>s.status==='err').length;
     out.push({key:'cal', label:'Calendar feeds',
       detail: bad?bad+' of '+SUBS.length+' failing' : SUBS.length+' syncing',
+      val: bad?bad+' failing' : SUBS.length+' feed'+(SUBS.length===1?'':'s'),
       state: bad?'warn':'ok'});
   }
   return out;
