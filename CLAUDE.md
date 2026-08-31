@@ -185,6 +185,13 @@ the non-obvious constraint, the browser quirk, the reason a regex looks odd.
 - Lab reports label rows like `Alpha-Globulin 1` and `CA 19-9`. Anchor value
   extraction on the unit token, not on the first number, or the label loses
   its trailing digit.
+- Reaching into the app from a test harness: only `function` declarations
+  land on `window`. Top-level `let`/`const` do not, and neither do
+  `const` arrow functions — `activeRoutinesOn`, `allSupps`, `state`,
+  `viewDate` are all unreachable from an iframe parent, and the resulting
+  TypeError kills a promise chain silently. `collectState()` and
+  `applyBackup()` are declarations, so those are the way in and out; seed
+  fixtures through `localStorage[DB_KEY]` before the frame loads.
 - Occasional controls sit ABOVE the primary content and the tab opens scrolled
   past them, via `id="scrollAnchor"` plus `ANCHORED_TABS` — Calendar anchors on
   the view switch, Bio on the blood-pressure card. This is deliberate (asked

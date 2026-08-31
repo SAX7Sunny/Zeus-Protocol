@@ -116,10 +116,17 @@
   .eat-line { margin-top:5px; cursor:pointer; }
   .eat-row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
   .pct { font-size:24px; font-weight:600; color:var(--moss); line-height:1; }
+  /* Both carry the SYSTEMS state; .pct's glow is restated because the base
+     rule further down hard-codes a green one. */
+  .pct.watch { color:var(--amber); text-shadow:0 0 18px rgba(255,194,71,.45); }
+  .pct.warn  { color:var(--rose);  text-shadow:0 0 18px rgba(255,95,109,.45); }
   .pct-sub { font-size:12.5px; color:var(--muted); }
   .progress-track { height:6px; background:rgba(214,233,242,.10); border-radius:4px; overflow:hidden;
     margin-bottom:3px; }
-  .progress-bar { height:100%; width:0%; background:var(--moss); border-radius:4px; transition:width .4s ease; }
+  .progress-bar { height:100%; width:0%; background:var(--moss); border-radius:4px;
+    transition:width .4s ease, background-color .4s ease; }
+  .progress-bar.watch { background:var(--amber); }
+  .progress-bar.warn  { background:var(--rose); }
 
   /* Six tabs no longer fit at a readable size, so the bar scrolls sideways
      rather than shrinking the labels. The fade lives on the wrapper, not the
@@ -3467,9 +3474,16 @@ function systemsReport(){
   return out;
 }
 
+// Worst state wins. Read by the SYSTEMS block and by the header's completion
+// bar, which is why it is a function and not an expression inside one of them.
+function systemsWorst(rows){
+  return (rows||systemsReport())
+    .reduce((w,r)=>SYS_ORDER.indexOf(r.state)>SYS_ORDER.indexOf(w)?r.state:w,'ok');
+}
+
 function systemsHTML(){
   const rows=systemsReport();
-  const worst=rows.reduce((w,r)=>SYS_ORDER.indexOf(r.state)>SYS_ORDER.indexOf(w)?r.state:w,'ok');
+  const worst=systemsWorst(rows);
   const headline={ok:'All systems nominal',watch:'Minor deviations',warn:'Attention required'}[worst];
   return `<div class="sysblock ${worst}" id="sysBlock">
     <button class="sys-head" onclick="sysToggle()" aria-expanded="${sysOpen}">
@@ -4574,8 +4588,16 @@ function renderProgress(){
   else { const vr=activeRoutinesOn(viewDate), vs=allSupps();
     total=vr.length+vs.length; done=vr.filter(r=>mr[r.id]).length+vs.filter(s=>ms[s.id]).length; }
   const pct=total?Math.round(done/total*100):0;
-  document.getElementById('bar').style.width=pct+'%';
-  document.getElementById('pct').textContent=pct+'%';
+  const bar=document.getElementById('bar'), pctEl=document.getElementById('pct');
+  bar.style.width=pct+'%';
+  pctEl.textContent=pct+'%';
+  // Colour reports the SYSTEMS state, not this number. The two say different
+  // things on purpose: the bar's length is how much of the day is ticked off,
+  // its colour is whether anything anywhere needs attention — so a full bar
+  // can still read amber with, say, a blood panel overdue. Same rule as the
+  // SYSTEMS dot, via systemsWorst(), so they can never disagree.
+  const worst=systemsWorst();
+  ['watch','warn'].forEach(c=>{ bar.classList.toggle(c,worst===c); pctEl.classList.toggle(c,worst===c); });
 }
 
 function resetDay(){ state[dk()]={}; optOn[dk()]={}; render(); }
