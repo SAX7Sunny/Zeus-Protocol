@@ -4229,6 +4229,8 @@ async function acctSignOut(){
   cloudConflict=null; cloudStatus='offline'; cloudStatusMsg=''; acctMsg=''; acctOpen=false;
   consentRow=null; consentGateOpen=false; consentChecked=false;
   acctDeleteOpen=false; acctDeleteTyped=''; acctDeleteBusy=false; acctDeleteMsg='';
+  connLoaded=false; connLoading=false; connTokens=[];
+  connNewLabel=''; connGenerating=false; connGeneratedPlaintext=null; connMsg='';
   saveCloudMeta();
   render();
 }
@@ -4395,6 +4397,122 @@ function accountCardHTML(){
       <button class="opt-pill off" onclick="acctSignOut()">Sign out</button>
     </div>
     ${deleteBlock}
+  </div>`;
+}
+
+/* ---------- CONNECTIONS (ROADMAP.md 5.3) ----------
+   Long-lived device tokens for the Apple Shortcut that posts to the
+   ingest Edge Function — a Supabase session expires in ~1h, too short
+   for a daily automation. Only the SHA-256 hash ever reaches the
+   database (matches supabase/functions/ingest, which hashes the
+   presented token the same way to look it up); the plaintext exists
+   only in connGeneratedPlaintext, in memory, never persisted, and is
+   cleared the moment the user dismisses the one-time reveal. */
+let connLoaded=false, connLoading=false, connTokens=[];
+let connNewLabel='', connGenerating=false, connGeneratedPlaintext=null, connMsg='';
+
+function randomDeviceToken(){
+  const bytes=new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let bin=''; bytes.forEach(b=>bin+=String.fromCharCode(b));
+  // base64url, unpadded — compact and safe as a bearer token / header value.
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function sha256Hex(str){
+  const digest=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function connLoadTokens(){
+  if(!cloudSession) return;
+  try{
+    const sb=await getSbClient();
+    const {data,error}=await sb.from('device_tokens')
+      .select('id,label,created_at,last_used')
+      .eq('user_id',cloudSession.user.id).is('revoked_at',null)
+      .order('created_at',{ascending:false});
+    if(error) throw error;
+    connTokens=data||[];
+  }catch(e){
+    connMsg=e.message||connMsg;
+  }
+}
+async function connGenerateToken(){
+  if(!cloudSession||connGenerating) return;
+  const el=document.getElementById('connLabelInput');
+  connNewLabel=el?el.value:'';
+  connGenerating=true; connMsg=''; render();
+  try{
+    const token=randomDeviceToken();
+    const hash=await sha256Hex(token);
+    const sb=await getSbClient();
+    const {error}=await sb.from('device_tokens')
+      .insert({user_id:cloudSession.user.id, token_hash:hash, label:connNewLabel.trim()||null});
+    if(error) throw error;
+    connGeneratedPlaintext=token;   // shown once; never re-derivable, since only the hash was stored
+    connNewLabel='';
+    await connLoadTokens();
+  }catch(e){
+    connMsg=e.message||'Could not create a token.';
+  }
+  connGenerating=false; render();
+}
+async function connRevokeToken(id){
+  if(!cloudSession) return;
+  if(!confirm('Revoke this token? Any Shortcut using it will stop working.')) return;
+  try{
+    const sb=await getSbClient();
+    const {error}=await sb.from('device_tokens')
+      .update({revoked_at:new Date().toISOString()}).eq('id',id);
+    if(error) throw error;
+    await connLoadTokens();
+  }catch(e){
+    connMsg=e.message||'Could not revoke the token.';
+  }
+  render();
+}
+async function connCopyToken(){
+  if(!connGeneratedPlaintext) return;
+  try{ await navigator.clipboard.writeText(connGeneratedPlaintext); connMsg='Copied.'; }
+  catch(e){ connMsg='Could not copy — select the text and copy it manually.'; }
+  render();
+}
+function connDismissGenerated(){
+  connGeneratedPlaintext=null; connMsg='';
+  render();
+}
+function connectionsCardHTML(){
+  if(!cloudSession) return '';
+  if(!connLoaded&&!connLoading){
+    connLoading=true;
+    connLoadTokens().then(()=>{ connLoading=false; connLoaded=true; render(); });
+  }
+  const genBlock = connGeneratedPlaintext ? `
+    <div class="gsub" style="color:var(--amber);margin-bottom:6px">Copy this now — it will not be shown again.</div>
+    <div class="gid-input" style="user-select:all;word-break:break-all;cursor:text">${esc(connGeneratedPlaintext)}</div>
+    <div class="backup-row" style="margin-top:0">
+      <button class="gbtn pri" onclick="connCopyToken()">Copy</button>
+      <button class="gbtn sec" onclick="connDismissGenerated()">Done</button>
+    </div>` : `
+    <input class="gid-input" id="connLabelInput" placeholder="Label (optional) — e.g. iPhone Shortcut" value="${esc(connNewLabel)}" ${connGenerating?'disabled':''}>
+    <div class="backup-row" style="margin-top:0">
+      <button class="gbtn pri" ${connGenerating?'disabled':''} onclick="connGenerateToken()">${connGenerating?'Generating…':'Generate Shortcut token'}</button>
+    </div>`;
+  const rows=connTokens.map(t=>`
+    <div class="sub-row">
+      <div class="sub-info">
+        <div class="sub-name">${esc(t.label||'Unnamed token')}</div>
+        <div class="sub-meta">Created ${new Date(t.created_at).toLocaleDateString()} · ${t.last_used?'last used '+new Date(t.last_used).toLocaleString():'never used'}</div>
+      </div>
+      <button class="ico del" onclick="connRevokeToken('${t.id}')" title="Revoke">✕</button>
+    </div>`).join('');
+  return `<div class="gcard">
+    <div class="gtop"><span class="gtitle">Connections</span></div>
+    <div class="gsub">Long-lived tokens for the Apple Shortcut that sends Health data — a signed-in session expires in about an hour, too short for a daily automation.</div>
+    ${genBlock}
+    ${connMsg?`<div class="gsub" style="margin:10px 0 0;color:${/copied/i.test(connMsg)?'var(--moss)':'var(--rose)'}">${esc(connMsg)}</div>`:''}
+    <div style="margin-top:14px">
+      ${connLoading?'<div class="sub-empty">Loading…</div>':(rows||'<div class="sub-empty">No tokens yet.</div>')}
+    </div>
   </div>`;
 }
 
@@ -4669,6 +4787,7 @@ function renderCalendar(c){
   // view opens below them, on the calendar itself.
   c.insertAdjacentHTML('beforeend', subCardHTML());
   c.insertAdjacentHTML('beforeend', accountCardHTML());
+  c.insertAdjacentHTML('beforeend', connectionsCardHTML());
   c.insertAdjacentHTML('beforeend', personalisationCardHTML());
   c.insertAdjacentHTML('beforeend', calDataSectionHTML());
 
