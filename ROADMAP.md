@@ -2,12 +2,10 @@
 
 ## Status
 
-**Phase 4 — testing (current).** Single HTML file on GitHub Pages, all data in
-browser local storage. Calendar subscriptions run through a Cloudflare Worker
-CORS proxy. Biomarkers parsed from lab PDFs, stored locally.
-
-Open before phase 5: JSON backup export, biomarker parser rewrite (92 vs 9
-values), calendar colour picker, day view.
+**Phase 5 — backend, accounts, integrations (current), as of 2026-09-05.**
+5.1 (Supabase accounts with local-first sync), 5.2 (GDPR consent gating) and
+5.4 (per-user personalisation) are deployed and working. **5.3 remains open:**
+Apple Health via Shortcuts first, then Whoop; Eight Sleep stays deferred.
 
 **Phase 6** exists as a later option, not a commitment: packaging the web app
 properly, from PWA polish up to a native shell. Only 6.1 is a given; anything
