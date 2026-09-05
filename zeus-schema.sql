@@ -67,3 +67,26 @@ select tablename, rowsecurity
 from pg_tables
 where schemaname = 'public'
 order by tablename;
+
+-- Self-service account deletion (ROADMAP.md 5.2, "Delete account" in
+-- index.html). The client only ever holds the anon key, so it can never
+-- call the Admin API — that needs the service-role key, which must never
+-- reach client code. SECURITY DEFINER runs this with the privileges of
+-- whoever creates it (normally the project owner, which can reach
+-- auth.users), while the auth.uid() check keeps it strictly self-service:
+-- there is no argument to pass, so nobody can target another user's row.
+-- app_data, consents and profiles all reference auth.users with
+-- `on delete cascade`, so deleting the user row clears all three.
+create or replace function delete_own_account()
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+begin
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+revoke all on function delete_own_account() from public;
+grant execute on function delete_own_account() to authenticated;

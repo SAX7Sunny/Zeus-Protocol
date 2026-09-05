@@ -1317,6 +1317,14 @@
   </div>
 </div>
 
+<!-- GDPR consent gate (ROADMAP.md 5.2). Reuses .overlay/.sheet like the
+     conflict dialog above; note that .overlay itself has no backdrop-click
+     handler anywhere in this app, so it is already non-dismissable by
+     default — nothing extra was needed to make this one un-closeable. -->
+<div class="overlay" id="consentOverlay">
+  <div class="sheet" id="consentSheetBody"></div>
+</div>
+
 <script>
 // Display order is Monday-first to match the month grid; the stored values
 // stay JS day numbers (0 = Sunday).
@@ -1636,6 +1644,10 @@ const SUPABASE_SDK_URL='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dis
 // DB_KEY and the STATE_KEYS/collectState() contract, so it never ends up
 // in the JSON backup export.
 const CLOUD_KEY='zeus.cloud.meta';
+// ROADMAP.md 5.2. Bump this when the consent text below changes — a
+// mismatch (not just "older") is treated as needing re-consent, since a
+// stored value never gets ahead of this constant in normal operation.
+const CONSENT_VERSION='1.0';
 
 let sbClient=null, sbLoadPromise=null;
 let cloudEmail='', cloudLastSyncedAt=null, localLastEditAt=null;
@@ -1645,6 +1657,12 @@ let cloudStatusMsg='';
 let cloudPushTimer=null, cloudPushInFlight=false, cloudLastPushedJSON=null;
 let cloudConflict=null;         // {remote:{payload,updated_at}} while the choice dialog is up
 let acctOpen=false, acctBusy=false, acctMsg='', acctEmailDraft='';
+// Consent gate: {accepted_at,version}|null, set once we know it either way.
+// consentGateOpen only ever becomes true from inside cloudCheckConsent(),
+// which only ever runs once cloudSession exists — so a user who never
+// signs in never touches this at all.
+let consentRow=null, consentGateOpen=false, consentChecked=false;
+let acctDeleteOpen=false, acctDeleteTyped='', acctDeleteBusy=false, acctDeleteMsg='';
 
 function loadCloudMeta(){
   try{
@@ -1707,12 +1725,14 @@ function cloudSyncPayload(){
 // Trailing debounce: every dirty mark restarts the 3s timer, so a burst of
 // taps pushes once, 3s after the last one — not once per tap.
 function cloudSchedulePush(){
+  if(consentGateOpen) return;   // no data syncs until consent is recorded
   cloudStatus='pending';
   if(cloudPushTimer) clearTimeout(cloudPushTimer);
   cloudPushTimer=setTimeout(()=>{ cloudPushTimer=null; cloudPushNow(); }, 3000);
 }
 async function cloudPushNow(){
   if(!cloudSession) return;
+  if(consentGateOpen) return;   // no data syncs until consent is recorded
   if(!navigator.onLine){ cloudStatus='offline'; if(activeTab==='cal') render(); return; }
   if(cloudPushInFlight) return;   // a fresh edit during the request re-arms the timer on its own
   const payload=cloudSyncPayload();
@@ -1737,10 +1757,37 @@ async function cloudPushNow(){
   }
 }
 
+// ROADMAP.md 5.2: no data syncs for a signed-in user until a current-version
+// row exists in consents. Only ever called with cloudSession already set,
+// so a user who never signs in never reaches this.
+async function cloudCheckConsent(sb){
+  try{
+    const {data,error}=await sb.from('consents')
+      .select('accepted_at,version').eq('user_id',cloudSession.user.id).maybeSingle();
+    if(error) throw error;
+    consentRow=data;
+  }catch(e){
+    // Fail closed: an unknown consent state blocks sync rather than assuming it.
+    consentRow=null;
+    cloudStatusMsg=e.message||'Could not verify consent.';
+  }
+  consentGateOpen=!consentRow || consentRow.version!==CONSENT_VERSION;
+  return !consentGateOpen;
+}
+// Every path that establishes cloudSession (sign in, sign up, boot resume)
+// funnels through here rather than calling cloudReconcile directly, so
+// consent is always checked first and nothing syncs before it clears.
+async function cloudProceedAfterAuth(sb){
+  const ok=await cloudCheckConsent(sb);
+  render();
+  if(ok) await cloudReconcile(sb);
+}
+
 // Runs once right after sign-in, and again whenever "Sync now" is pressed.
 // Never guesses when both sides hold data that disagree — see the
 // conflict dialog (renderCloudConflict / acctChooseLocal / acctChooseCloud).
 async function cloudReconcile(sb){
+  if(consentGateOpen) return;   // no data syncs until consent is recorded
   if(!navigator.onLine){ cloudStatus='offline'; if(activeTab==='cal') render(); return; }
   cloudStatus='pending'; if(activeTab==='cal') render();
   let remoteRow=null;
@@ -1799,12 +1846,12 @@ async function cloudBootResume(){
     const {data:{session}}=await sb.auth.getSession();
     if(!session){ cloudEmail=''; saveCloudMeta(); return; }
     cloudSession=session;
-    await cloudReconcile(sb);
+    await cloudProceedAfterAuth(sb);
   }catch(e){
     cloudStatus=navigator.onLine?'error':'offline';
     cloudStatusMsg=e.message||'Could not resume sync.';
+    if(activeTab==='cal') render();
   }
-  if(activeTab==='cal') render();
 }
 
 window.addEventListener('online', ()=>{ if(cloudSession) cloudPushNow(); });
@@ -2654,6 +2701,7 @@ function render(){
   else renderBio(c);
   renderProgress(); renderEatWindow(); renderRail(); renderArc(); saveAll();
   renderCloudConflict();
+  renderConsentGate();
   syncHeaderHeight();
 }
 
@@ -4010,7 +4058,7 @@ async function acctSignIn(){
     if(error) throw error;
     cloudSession=data.session; cloudEmail=data.user.email; saveCloudMeta();
     acctBusy=false; acctMsg=''; render();
-    await cloudReconcile(sb);
+    await cloudProceedAfterAuth(sb);
   }catch(e){
     acctBusy=false;
     acctMsg=/Invalid login credentials/i.test(e.message||'') ? 'Wrong email or password.' : (e.message||'Sign-in failed.');
@@ -4033,7 +4081,7 @@ async function acctSignUp(){
       // Confirmation switched off on this project — session arrives immediately.
       cloudSession=data.session; cloudEmail=data.user.email; saveCloudMeta();
       acctMsg=''; render();
-      await cloudReconcile(sb);
+      await cloudProceedAfterAuth(sb);
     }else{
       acctMsg='Account created — check your email to confirm it, then sign in.';
       render();
@@ -4056,8 +4104,59 @@ async function acctSignOut(){
   try{ if(sbClient) await sbClient.auth.signOut(); }catch(e){}
   cloudSession=null; cloudEmail=''; cloudLastSyncedAt=null; cloudLastPushedJSON=null;
   cloudConflict=null; cloudStatus='offline'; cloudStatusMsg=''; acctMsg=''; acctOpen=false;
+  consentRow=null; consentGateOpen=false; consentChecked=false;
+  acctDeleteOpen=false; acctDeleteTyped=''; acctDeleteBusy=false; acctDeleteMsg='';
   saveCloudMeta();
   render();
+}
+function consentToggleCheck(v){ consentChecked=v; render(); }
+async function consentAccept(){
+  if(!consentChecked||!cloudSession||acctBusy) return;
+  acctBusy=true; render();
+  try{
+    const sb=await getSbClient();
+    const nowIso=new Date().toISOString();
+    const {error}=await sb.from('consents')
+      .upsert({user_id:cloudSession.user.id, accepted_at:nowIso, version:CONSENT_VERSION});
+    if(error) throw error;
+    consentRow={accepted_at:nowIso, version:CONSENT_VERSION};
+    consentGateOpen=false; consentChecked=false;
+    acctBusy=false; render();
+    await cloudReconcile(sb);
+  }catch(e){
+    acctBusy=false;
+    cloudStatusMsg=e.message||'Could not save consent — try again.';
+    render();
+  }
+}
+function acctDeleteToggle(){
+  acctDeleteOpen=!acctDeleteOpen; acctDeleteTyped=''; acctDeleteMsg='';
+  render();
+}
+// Deletes the auth.users row via the delete_own_account() RPC in
+// zeus-schema.sql — SECURITY DEFINER, scoped to auth.uid(), since the
+// client only ever holds the anon key and must never see a service-role
+// key. on delete cascade on app_data/consents/profiles handles the rest.
+// Local storage is never touched, so the app keeps working offline after.
+async function acctDeleteAccount(){
+  if(!cloudSession||acctDeleteBusy) return;
+  const el=document.getElementById('acctDeleteInput');
+  acctDeleteTyped=el?el.value:'';
+  if(acctDeleteTyped.trim()!=='DELETE'){ acctDeleteMsg='Type DELETE (all caps) to confirm.'; render(); return; }
+  acctDeleteBusy=true; acctDeleteMsg='Deleting…'; render();
+  try{
+    download(JSON.stringify({...collectState(), exportedAt:new Date().toISOString(), appVersion:APP_VERSION, schema:2},null,2),
+      'zeus-backup-before-delete-'+key(new Date())+'.json', 'application/json;charset=utf-8');
+    const sb=await getSbClient();
+    const {error}=await sb.rpc('delete_own_account');
+    if(error) throw error;
+    acctDeleteOpen=false; acctDeleteBusy=false; acctDeleteTyped=''; acctDeleteMsg='';
+    await acctSignOut();
+  }catch(e){
+    acctDeleteBusy=false;
+    acctDeleteMsg=e.message||'Could not delete the account — try again.';
+    render();
+  }
 }
 function acctDeferConflict(){
   cloudConflict=null;
@@ -4103,6 +4202,33 @@ function renderCloudConflict(){
       <div class="gsub" style="margin:0">${esc(cnt(remote.payload))}</div></div>`;
   ov.classList.add('open');
 }
+function renderConsentGate(){
+  const ov=document.getElementById('consentOverlay'); if(!ov) return;
+  if(!consentGateOpen){ ov.classList.remove('open'); return; }
+  document.getElementById('consentSheetBody').innerHTML=`
+    <h2>Your data, in plain terms</h2>
+    <p class="hint">Before anything syncs to the cloud, here is exactly what that means.</p>
+    <div class="field"><label>What's stored</label>
+      <div class="gsub" style="margin:0">Routines, supplements, tasks, calendar settings, and daily completion.</div></div>
+    <div class="field"><label>What's not stored</label>
+      <div class="gsub" style="margin:0">Blood panel readings stay on this device only. They are never uploaded.</div></div>
+    <div class="field"><label>Where</label>
+      <div class="gsub" style="margin:0">A database in Frankfurt, Germany (EU).</div></div>
+    <div class="field"><label>How long</label>
+      <div class="gsub" style="margin:0">Until you delete your account.</div></div>
+    <div class="field"><label>Your rights</label>
+      <div class="gsub" style="margin:0">Export everything at any time via the backup file. Delete everything at any time with Delete account.</div></div>
+    <label style="display:flex;gap:10px;align-items:flex-start;margin:18px 2px;font-size:13px;color:var(--ink);cursor:pointer;">
+      <input type="checkbox" id="consentCheck" ${consentChecked?'checked':''} onchange="consentToggleCheck(this.checked)"
+        style="margin-top:2px;width:18px;height:18px;flex-shrink:0;accent-color:var(--frost);">
+      I agree to my data being stored as described.
+    </label>
+    <div class="sheet-actions">
+      <button class="btn-ghost" ${acctBusy?'disabled':''} onclick="acctSignOut()">Sign out instead</button>
+      <button class="btn-primary" ${(!consentChecked||acctBusy)?'disabled':''} onclick="consentAccept()">${acctBusy?'Saving…':'Continue'}</button>
+    </div>`;
+  ov.classList.add('open');
+}
 function accountCardHTML(){
   if(!cloudSession){
     if(!acctOpen){
@@ -4126,6 +4252,17 @@ function accountCardHTML(){
     </div>`;
   }
   const st=cloudStatusLabel();
+  const deleteBlock = acctDeleteOpen ? `
+    <div class="gsub" style="margin-top:14px;color:var(--rose)">This permanently deletes your account and cloud data. A final backup downloads automatically first. Local data on this device is not touched.</div>
+    <input class="gid-input" id="acctDeleteInput" placeholder="Type DELETE to confirm" value="${esc(acctDeleteTyped)}" ${acctDeleteBusy?'disabled':''}>
+    ${acctDeleteMsg?`<div class="gsub" style="margin:-4px 0 12px;color:var(--rose)">${esc(acctDeleteMsg)}</div>`:''}
+    <div class="backup-row" style="margin-top:0">
+      <button class="gbtn sec" ${acctDeleteBusy?'disabled':''} onclick="acctDeleteToggle()">Cancel</button>
+      <button class="btn-danger" style="flex:1" ${acctDeleteBusy?'disabled':''} onclick="acctDeleteAccount()">${acctDeleteBusy?'Deleting…':'Delete forever'}</button>
+    </div>` : `
+    <div class="backup-row" style="margin-top:10px">
+      <button class="opt-pill off" onclick="acctDeleteToggle()">Delete account</button>
+    </div>`;
   return `<div class="gcard">
     <div class="gtop"><span class="gtitle">Account &amp; cloud sync</span></div>
     <div class="gsub"><b>${esc(cloudSession.user.email||cloudEmail)}</b><br>
@@ -4134,6 +4271,7 @@ function accountCardHTML(){
       <button class="opt-pill" ${acctBusy?'disabled':''} onclick="acctSyncNow()">Sync now</button>
       <button class="opt-pill off" onclick="acctSignOut()">Sign out</button>
     </div>
+    ${deleteBlock}
   </div>`;
 }
 
