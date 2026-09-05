@@ -333,6 +333,11 @@
   .sub-name { font-size:13px; font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .sub-meta { font-size:11.5px; color:var(--muted); margin-top:2px; }
   .sub-meta.err { color:var(--rose); }
+  .cloud-dot { width:7px; height:7px; border-radius:50%; display:inline-block;
+    margin-right:6px; vertical-align:middle; background:var(--muted); }
+  .cloud-dot.ok { background:var(--moss); }
+  .cloud-dot.watch { background:var(--amber); }
+  .cloud-dot.warn { background:var(--rose); }
   .color-picker { display:flex; flex-wrap:wrap; gap:8px; padding:10px 0; }
   .color-swatch { width:26px; height:26px; border-radius:50%; border:none; padding:0; flex-shrink:0; cursor:pointer; }
   .color-swatch.active { outline:2px solid var(--ink); outline-offset:2px; }
@@ -1299,6 +1304,19 @@
   </div>
 </div>
 
+<div class="overlay" id="cloudOverlay">
+  <div class="sheet">
+    <h2>Sync conflict</h2>
+    <p class="hint">This device and the cloud both changed since they last agreed. Pick which one to keep — the other is downloaded as a backup first, so nothing is lost.</p>
+    <div id="cloudConflictBody"></div>
+    <div class="sheet-actions">
+      <button class="btn-ghost" onclick="acctDeferConflict()">Later</button>
+      <button class="btn-ghost" onclick="acctChooseCloud()">Use cloud</button>
+      <button class="btn-primary" onclick="acctChooseLocal()">Keep device</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // Display order is Monday-first to match the month grid; the stored values
 // stay JS day numbers (0 = Sunday).
@@ -1487,6 +1505,7 @@ function saveAll(){
   try{
     localStorage.setItem(DB_KEY, JSON.stringify(collectState()));
     lastSaveOk=true;
+    cloudMarkDirty();
   }catch(e){ canPersist=false; lastSaveOk=false; }
 }
 // Old saved panels kept values as {markerKey:{v,unit}}; convert to the
@@ -1588,6 +1607,207 @@ function mergeNewDefaults(){
   if(added) console.log('Merged '+added+' new default item(s).');
   return added;
 }
+
+/* ======================================================================
+   CLOUD SYNC — optional Supabase mirror (ROADMAP.md 5.1, zeus-schema.sql).
+   Local-first: localStorage under DB_KEY above stays the only store that
+   has to work. Everything below is additive — signed out, offline, an
+   expired token or a paused free-tier project must never block a render
+   or a local save; every existing write path keeps working with no
+   network at all.
+
+   supabase-js is not a static <script> tag. CLOUD_KEY remembers whether
+   this browser has ever linked an account; only then do we pay to load
+   the SDK at boot, so a returning signed-in user keeps syncing without
+   reopening the account panel every visit. A browser that has never
+   signed in loads nothing extra, ever — the SDK is fetched for the first
+   time only when the account panel is opened (acctToggleOpen()) or when
+   a sign-in/sign-up is actually submitted.
+   ====================================================================== */
+// Fill these in from the Supabase project dashboard: Settings -> API.
+// The anon key is public by design — it identifies the project, not a
+// secret. Row-level security in zeus-schema.sql is what actually protects
+// a row (every policy is `auth.uid() = user_id`), so this key alone can
+// read nothing on its own.
+const SUPABASE_URL='https://YOUR-PROJECT-REF.supabase.co';
+const SUPABASE_ANON_KEY='YOUR-ANON-KEY';
+const SUPABASE_SDK_URL='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
+// Connection metadata, not app data: deliberately its own key, outside
+// DB_KEY and the STATE_KEYS/collectState() contract, so it never ends up
+// in the JSON backup export.
+const CLOUD_KEY='zeus.cloud.meta';
+
+let sbClient=null, sbLoadPromise=null;
+let cloudEmail='', cloudLastSyncedAt=null, localLastEditAt=null;
+let cloudSession=null;          // supabase-js session once signed in
+let cloudStatus='offline';      // 'offline' | 'pending' | 'synced' | 'error'
+let cloudStatusMsg='';
+let cloudPushTimer=null, cloudPushInFlight=false, cloudLastPushedJSON=null;
+let cloudConflict=null;         // {remote:{payload,updated_at}} while the choice dialog is up
+let acctOpen=false, acctBusy=false, acctMsg='', acctEmailDraft='';
+
+function loadCloudMeta(){
+  try{
+    const raw=localStorage.getItem(CLOUD_KEY); if(!raw) return;
+    const m=JSON.parse(raw);
+    cloudEmail=m.email||''; cloudLastSyncedAt=m.lastSyncedAt||null; localLastEditAt=m.localLastEditAt||null;
+  }catch(e){}
+}
+function saveCloudMeta(){
+  try{
+    localStorage.setItem(CLOUD_KEY, JSON.stringify(
+      {email:cloudEmail, lastSyncedAt:cloudLastSyncedAt, localLastEditAt}));
+  }catch(e){}
+}
+loadCloudMeta();
+
+// Called from saveAll() below — every local save marks the mirror dirty
+// and (if signed in) arms the debounced push. Signed out, this only
+// timestamps the edit for the conflict dialog; nothing schedules or fires.
+function cloudMarkDirty(){
+  localLastEditAt=new Date().toISOString();
+  saveCloudMeta();
+  if(cloudSession) cloudSchedulePush();
+}
+
+function loadSupabaseSDK(){
+  if(window.supabase) return Promise.resolve();
+  if(sbLoadPromise) return sbLoadPromise;
+  sbLoadPromise=new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src=SUPABASE_SDK_URL;
+    s.onload=()=>resolve();
+    s.onerror=()=>{ sbLoadPromise=null; reject(new Error('Could not load the sync library — check your connection.')); };
+    document.head.appendChild(s);
+  });
+  return sbLoadPromise;
+}
+async function getSbClient(){
+  if(sbClient) return sbClient;
+  await loadSupabaseSDK();
+  sbClient=window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  sbClient.auth.onAuthStateChange((event)=>{
+    if(event==='SIGNED_OUT'){ cloudSession=null; cloudStatus='offline'; if(activeTab==='cal') render(); }
+  });
+  return sbClient;
+}
+
+// Reuses the same shape the backup export uses, minus what must never
+// leave the device. PANELS holds parsed lab values — Article 9 health
+// data under GDPR (see CLAUDE.md Privacy / ROADMAP.md 5.2) — so it is
+// stripped here explicitly, by name, precisely so nobody re-adds it by
+// widening collectState() later without noticing this line. SUBS already
+// carries no fetched events (see the comment above collectState()), so
+// there is nothing else here that gets re-fetched anyway.
+function cloudSyncPayload(){
+  const {PANELS, ...rest}=collectState();
+  return rest;
+}
+
+// Trailing debounce: every dirty mark restarts the 3s timer, so a burst of
+// taps pushes once, 3s after the last one — not once per tap.
+function cloudSchedulePush(){
+  cloudStatus='pending';
+  if(cloudPushTimer) clearTimeout(cloudPushTimer);
+  cloudPushTimer=setTimeout(()=>{ cloudPushTimer=null; cloudPushNow(); }, 3000);
+}
+async function cloudPushNow(){
+  if(!cloudSession) return;
+  if(!navigator.onLine){ cloudStatus='offline'; if(activeTab==='cal') render(); return; }
+  if(cloudPushInFlight) return;   // a fresh edit during the request re-arms the timer on its own
+  const payload=cloudSyncPayload();
+  const json=JSON.stringify(payload);
+  if(json===cloudLastPushedJSON){ cloudStatus='synced'; if(activeTab==='cal') render(); return; }
+  cloudPushInFlight=true;
+  cloudStatus='pending'; if(activeTab==='cal') render();
+  try{
+    const sb=await getSbClient();
+    const nowIso=new Date().toISOString();
+    const {error}=await sb.from('app_data')
+      .upsert({user_id:cloudSession.user.id, payload, updated_at:nowIso});
+    if(error) throw error;
+    cloudLastPushedJSON=json; cloudLastSyncedAt=nowIso; saveCloudMeta();
+    cloudStatus='synced'; cloudStatusMsg='';
+  }catch(e){
+    cloudStatus=navigator.onLine?'error':'offline';
+    cloudStatusMsg=e.message||'Sync failed.';
+  }finally{
+    cloudPushInFlight=false;
+    if(activeTab==='cal') render();
+  }
+}
+
+// Runs once right after sign-in, and again whenever "Sync now" is pressed.
+// Never guesses when both sides hold data that disagree — see the
+// conflict dialog (renderCloudConflict / acctChooseLocal / acctChooseCloud).
+async function cloudReconcile(sb){
+  if(!navigator.onLine){ cloudStatus='offline'; if(activeTab==='cal') render(); return; }
+  cloudStatus='pending'; if(activeTab==='cal') render();
+  let remoteRow=null;
+  try{
+    const {data,error}=await sb.from('app_data')
+      .select('payload,updated_at').eq('user_id',cloudSession.user.id).maybeSingle();
+    if(error) throw error;
+    remoteRow=data;
+  }catch(e){
+    cloudStatus=navigator.onLine?'error':'offline';
+    cloudStatusMsg=e.message||'Could not reach the sync server.';
+    if(activeTab==='cal') render();
+    return;
+  }
+  let localHasData=false;
+  try{ localHasData=!!localStorage.getItem(DB_KEY); }catch(e){}
+  const remoteHasData=!!remoteRow;
+
+  if(!localHasData && !remoteHasData){ cloudStatus='synced'; if(activeTab==='cal') render(); return; }
+  if(localHasData && !remoteHasData){ await cloudPushNow(); return; }
+  if(!localHasData && remoteHasData){
+    applyBackup(remoteRow.payload);
+    cloudLastSyncedAt=remoteRow.updated_at; saveCloudMeta();
+    saveAll();
+    // What saveAll() just scheduled to push back up is exactly what we
+    // pulled — pre-seed this so that debounced push finds nothing changed
+    // and skips, instead of round-tripping the same payload pointlessly.
+    cloudLastPushedJSON=JSON.stringify(cloudSyncPayload());
+    cloudStatus='synced'; render();
+    return;
+  }
+  // Both sides have data. Only "diverged" if the cloud moved on since the
+  // last point this device is known to agree with it — otherwise this
+  // device's copy simply continues from there.
+  const remoteChanged=!cloudLastSyncedAt || new Date(remoteRow.updated_at) > new Date(cloudLastSyncedAt);
+  if(!remoteChanged){ await cloudPushNow(); return; }
+  cloudConflict={remote:remoteRow};
+  cloudStatus='error'; cloudStatusMsg='Cloud and this device have different data.';
+  render();
+}
+
+// The one place a returning user's SDK load happens without them opening
+// the account panel first: CLOUD_KEY only holds an email once someone has
+// actually signed in before, so a browser that never has still loads
+// nothing here.
+async function cloudBootResume(){
+  if(!cloudEmail) return;
+  try{
+    const sb=await getSbClient();
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session){ cloudEmail=''; saveCloudMeta(); return; }
+    cloudSession=session;
+    await cloudReconcile(sb);
+  }catch(e){
+    cloudStatus=navigator.onLine?'error':'offline';
+    cloudStatusMsg=e.message||'Could not resume sync.';
+  }
+  if(activeTab==='cal') render();
+}
+
+window.addEventListener('online', ()=>{ if(cloudSession) cloudPushNow(); });
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='hidden' && cloudSession){
+    if(cloudPushTimer){ clearTimeout(cloudPushTimer); cloudPushTimer=null; }
+    cloudPushNow();
+  }
+});
 
 function wipeAll(){
   if(!confirm('Erase all saved routines, supplements and history on this device?')) return;
@@ -2427,6 +2647,7 @@ function render(){
   else if(activeTab==='cal') renderCalendar(c);
   else renderBio(c);
   renderProgress(); renderEatWindow(); renderRail(); renderArc(); saveAll();
+  renderCloudConflict();
   syncHeaderHeight();
 }
 
@@ -3750,6 +3971,163 @@ function subCardHTML(){
     </ol></details></div>`;
 }
 
+/* ---------- ACCOUNT & CLOUD SYNC PANEL ----------
+   Sits directly beneath the subscription card. Signed out, it is a
+   collapsed one-liner so a user who never wants cloud sync pays nothing
+   for it visually either — opening it is also what triggers the first,
+   speculative load of supabase-js (see acctToggleOpen). */
+function cloudStatusLabel(){
+  if(cloudStatus==='synced') return {cls:'ok', txt:'Synced'};
+  if(cloudStatus==='pending') return {cls:'watch', txt:'Syncing…'};
+  if(cloudStatus==='error') return {cls:'warn', txt:cloudStatusMsg||'Sync error'};
+  return {cls:'', txt:'Offline — will retry'};
+}
+function acctToggleOpen(){
+  acctOpen=!acctOpen;
+  if(acctOpen) loadSupabaseSDK().catch(()=>{});   // pre-warm only; real errors surface on submit
+  render();
+}
+function acctReadFields(){
+  const email=((document.getElementById('acctEmail')||{}).value||'').trim();
+  const password=(document.getElementById('acctPassword')||{}).value||'';
+  return {email,password};
+}
+async function acctSignIn(){
+  if(acctBusy) return;
+  const {email,password}=acctReadFields();
+  acctEmailDraft=email;
+  if(!email||!password){ acctMsg='Enter both email and password.'; render(); return; }
+  acctBusy=true; acctMsg='Signing in…'; render();
+  try{
+    const sb=await getSbClient();
+    const {data,error}=await sb.auth.signInWithPassword({email,password});
+    if(error) throw error;
+    cloudSession=data.session; cloudEmail=data.user.email; saveCloudMeta();
+    acctBusy=false; acctMsg=''; render();
+    await cloudReconcile(sb);
+  }catch(e){
+    acctBusy=false;
+    acctMsg=/Invalid login credentials/i.test(e.message||'') ? 'Wrong email or password.' : (e.message||'Sign-in failed.');
+    render();
+  }
+}
+async function acctSignUp(){
+  if(acctBusy) return;
+  const {email,password}=acctReadFields();
+  acctEmailDraft=email;
+  if(!email||!password){ acctMsg='Enter both email and password.'; render(); return; }
+  if(password.length<6){ acctMsg='Password needs at least 6 characters.'; render(); return; }
+  acctBusy=true; acctMsg='Creating account…'; render();
+  try{
+    const sb=await getSbClient();
+    const {data,error}=await sb.auth.signUp({email,password});
+    if(error) throw error;
+    acctBusy=false;
+    if(data.session){
+      // Confirmation switched off on this project — session arrives immediately.
+      cloudSession=data.session; cloudEmail=data.user.email; saveCloudMeta();
+      acctMsg=''; render();
+      await cloudReconcile(sb);
+    }else{
+      acctMsg='Account created — check your email to confirm it, then sign in.';
+      render();
+    }
+  }catch(e){
+    acctBusy=false;
+    acctMsg=/already registered|already exists/i.test(e.message||'') ? 'That email already has an account — sign in instead.' : (e.message||'Sign-up failed.');
+    render();
+  }
+}
+async function acctSyncNow(){
+  if(!cloudSession||acctBusy) return;
+  acctBusy=true; render();
+  try{ const sb=await getSbClient(); await cloudReconcile(sb); }
+  catch(e){ cloudStatus='error'; cloudStatusMsg=e.message||'Sync failed.'; }
+  acctBusy=false; render();
+}
+async function acctSignOut(){
+  if(cloudPushTimer){ clearTimeout(cloudPushTimer); cloudPushTimer=null; }
+  try{ if(sbClient) await sbClient.auth.signOut(); }catch(e){}
+  cloudSession=null; cloudEmail=''; cloudLastSyncedAt=null; cloudLastPushedJSON=null;
+  cloudConflict=null; cloudStatus='offline'; cloudStatusMsg=''; acctMsg=''; acctOpen=false;
+  saveCloudMeta();
+  render();
+}
+function acctDeferConflict(){
+  cloudConflict=null;
+  cloudStatus='error'; cloudStatusMsg='Sync paused — cloud and this device differ. Tap Sync now to decide.';
+  render();
+}
+function acctChooseLocal(){
+  if(!cloudConflict) return;
+  const {remote}=cloudConflict;
+  download(JSON.stringify({...remote.payload, exportedAt:new Date().toISOString(), appVersion:APP_VERSION, schema:2},null,2),
+    'zeus-conflict-cloud-'+key(new Date())+'.json', 'application/json;charset=utf-8');
+  cloudConflict=null;
+  cloudLastPushedJSON=null;   // the cloud copy just downloaded differs from ours — force the push through
+  cloudPushNow();
+  render();
+}
+function acctChooseCloud(){
+  if(!cloudConflict) return;
+  const {remote}=cloudConflict;
+  download(JSON.stringify({...collectState(), exportedAt:new Date().toISOString(), appVersion:APP_VERSION, schema:2},null,2),
+    'zeus-conflict-device-'+key(new Date())+'.json', 'application/json;charset=utf-8');
+  applyBackup(remote.payload);
+  cloudLastSyncedAt=remote.updated_at; saveCloudMeta();
+  cloudConflict=null;
+  saveAll();
+  cloudLastPushedJSON=JSON.stringify(cloudSyncPayload());   // same reasoning as in cloudReconcile's pull branch
+  render();
+}
+function renderCloudConflict(){
+  const ov=document.getElementById('cloudOverlay'); if(!ov) return;
+  if(!cloudConflict){ ov.classList.remove('open'); return; }
+  const {remote}=cloudConflict;
+  const local=collectState();
+  const cnt=d=>(d.ROUTINES||[]).length+' routine'+((d.ROUTINES||[]).length===1?'':'s')+', '
+    +(d.TASKS||[]).length+' task'+((d.TASKS||[]).length===1?'':'s');
+  document.getElementById('cloudConflictBody').innerHTML=
+    `<div class="field"><label>This device — ${localLastEditAt?esc(new Date(localLastEditAt).toLocaleString()):'unknown time'}</label>
+      <div class="gsub" style="margin:0">${esc(cnt(local))}</div></div>
+    <div class="field"><label>Cloud — ${esc(new Date(remote.updated_at).toLocaleString())}</label>
+      <div class="gsub" style="margin:0">${esc(cnt(remote.payload))}</div></div>`;
+  ov.classList.add('open');
+}
+function accountCardHTML(){
+  if(!cloudSession){
+    if(!acctOpen){
+      return `<div class="gcard cal-collapsed" onclick="acctToggleOpen()">
+        <div class="gtop"><span class="gtitle">Account &amp; cloud sync</span>
+          <span class="cal-collapsed-meta">optional ›</span></div>
+      </div>`;
+    }
+    const isNotice=/created|check your email/i.test(acctMsg);
+    return `<div class="gcard">
+      <div class="gtop"><span class="gtitle">Account &amp; cloud sync</span>
+        <button class="ico edit" onclick="acctOpen=false;render()" title="Hide">︿</button></div>
+      <div class="gsub">Optional — sign in to mirror this device's data to the cloud and pick it up on another device. Local storage stays the real copy; nothing here changes how the app works signed out.</div>
+      <input class="gid-input" id="acctEmail" type="email" autocomplete="email" placeholder="Email" value="${esc(acctEmailDraft)}" ${acctBusy?'disabled':''}>
+      <input class="gid-input" id="acctPassword" type="password" autocomplete="current-password" placeholder="Password" ${acctBusy?'disabled':''}>
+      ${acctMsg?`<div class="gsub" style="margin:-4px 0 12px;color:${isNotice?'var(--moss)':'var(--rose)'}">${esc(acctMsg)}</div>`:''}
+      <div class="backup-row" style="margin-top:0">
+        <button class="gbtn sec" ${acctBusy?'disabled':''} onclick="acctSignUp()">Create account</button>
+        <button class="gbtn pri" ${acctBusy?'disabled':''} onclick="acctSignIn()">${acctBusy?'Working…':'Sign in'}</button>
+      </div>
+    </div>`;
+  }
+  const st=cloudStatusLabel();
+  return `<div class="gcard">
+    <div class="gtop"><span class="gtitle">Account &amp; cloud sync</span></div>
+    <div class="gsub"><b>${esc(cloudSession.user.email||cloudEmail)}</b><br>
+      <span class="cloud-dot ${st.cls}"></span>${esc(st.txt)}${cloudLastSyncedAt?' · last sync '+esc(new Date(cloudLastSyncedAt).toLocaleString()):''}</div>
+    <div class="backup-row" style="margin-top:0">
+      <button class="opt-pill" ${acctBusy?'disabled':''} onclick="acctSyncNow()">Sync now</button>
+      <button class="opt-pill off" onclick="acctSignOut()">Sign out</button>
+    </div>
+  </div>`;
+}
+
 function refreshDots(){
   document.querySelectorAll('[data-day]').forEach(b=>{
     const f=dayFlags(parseDay(b.dataset.day));
@@ -3982,6 +4360,7 @@ function renderCalendar(c){
   // Same idea as Bio: the subscription and backup cards render first but the
   // view opens below them, on the calendar itself.
   c.insertAdjacentHTML('beforeend', subCardHTML());
+  c.insertAdjacentHTML('beforeend', accountCardHTML());
   c.insertAdjacentHTML('beforeend', calDataSectionHTML());
 
   c.insertAdjacentHTML('beforeend',
@@ -5433,6 +5812,7 @@ window.addEventListener('resize',syncTabFade);
 syncTabFade();
 setInterval(()=>{ renderEatWindow(); updateNowLine(); arcTick(); },60000);
 if(SUBS.length){ startSubTimer(); subFetchAll(true); }
+cloudBootResume();
 </script>
 </body>
 </html>
