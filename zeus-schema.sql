@@ -90,3 +90,72 @@ $$;
 
 revoke all on function delete_own_account() from public;
 grant execute on function delete_own_account() to authenticated;
+
+-- ============================================================
+-- Metrics + device tokens (ROADMAP.md 5.3) — Apple Health and Whoop
+-- integrations.
+-- ============================================================
+
+-- ---------------------------------------------------------------
+-- One row per user, day and source. Apple Health supplies workouts
+-- and steps; Whoop supplies sleep and recovery. Keeping them in one
+-- table means the app reads a single shape regardless of origin.
+-- `data` stays jsonb so a source can add fields without a migration.
+-- ---------------------------------------------------------------
+create table if not exists metrics (
+  user_id    uuid        not null references auth.users on delete cascade,
+  day        date        not null,
+  source     text        not null check (source in ('apple_health','whoop')),
+  data       jsonb       not null,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, day, source)
+);
+
+create index if not exists metrics_user_day_idx on metrics (user_id, day desc);
+
+-- ---------------------------------------------------------------
+-- Long-lived tokens for the Apple Shortcut.
+--
+-- Why not the normal session token: a Supabase access token expires
+-- after about an hour, so a daily automation would break overnight.
+-- The app mints one of these instead, the user pastes it into the
+-- Shortcut once, and an Edge Function exchanges it for a user_id.
+--
+-- Only the hash is stored. The plaintext is shown once at creation
+-- and never again — a leaked table must not yield working tokens.
+-- ---------------------------------------------------------------
+create table if not exists device_tokens (
+  id         uuid        primary key default gen_random_uuid(),
+  user_id    uuid        not null references auth.users on delete cascade,
+  token_hash text        not null unique,
+  label      text,
+  created_at timestamptz not null default now(),
+  last_used  timestamptz,
+  revoked_at timestamptz
+);
+
+create index if not exists device_tokens_user_idx on device_tokens (user_id);
+
+-- ---------------------------------------------------------------
+-- Row level security. The Edge Function writes with the service
+-- role and bypasses these; they govern what the app itself may see.
+-- ---------------------------------------------------------------
+alter table metrics       enable row level security;
+alter table device_tokens enable row level security;
+
+drop policy if exists "own metrics" on metrics;
+create policy "own metrics" on metrics
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- The app may list and revoke its own tokens, but never read a hash
+-- back out — that column is excluded at the query layer in the client.
+drop policy if exists "own device tokens" on device_tokens;
+create policy "own device tokens" on device_tokens
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------
+-- Both tables should report rowsecurity = true.
+-- ---------------------------------------------------------------
+select tablename, rowsecurity
+from pg_tables
+where schemaname = 'public' and tablename in ('metrics','device_tokens');
