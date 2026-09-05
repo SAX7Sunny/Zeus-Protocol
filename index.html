@@ -338,6 +338,11 @@
   .cloud-dot.ok { background:var(--moss); }
   .cloud-dot.watch { background:var(--amber); }
   .cloud-dot.warn { background:var(--rose); }
+  .section-toggle-list { margin-top:10px; }
+  .section-toggle-row { display:flex; align-items:center; justify-content:space-between;
+    padding:10px 0; border-top:1px solid var(--line); font-size:13px; color:var(--ink); cursor:pointer; }
+  .section-toggle-row input[type="checkbox"] { width:18px; height:18px; flex-shrink:0; accent-color:var(--frost); }
+  .section-toggle-row input[type="checkbox"]:disabled { opacity:.4; cursor:not-allowed; }
   .color-picker { display:flex; flex-wrap:wrap; gap:8px; padding:10px 0; }
   .color-swatch { width:26px; height:26px; border-radius:50%; border:none; padding:0; flex-shrink:0; cursor:pointer; }
   .color-swatch.active { outline:2px solid var(--ink); outline-offset:2px; }
@@ -1110,7 +1115,7 @@
 <header>
   <div class="brandrow">
     <div class="brandtext">
-      <div class="eyebrow">ZEUS Protocol</div>
+      <div class="eyebrow" id="eyebrow">ZEUS Protocol</div>
       <h1 id="pageTitle">Agenda</h1>
     </div>
     <button class="logo" aria-label="Replay briefing" onclick="bootReplay()">Z&#931;VS</button>
@@ -1379,6 +1384,39 @@ let ROUTINES=DEFAULT_ROUTINES.map(cloneR);
 let SUPP_BLOCKS=JSON.parse(JSON.stringify(DEFAULT_SUPPS));
 let seenDefaults=[];   // ids already reconciled against saved data
 
+/* ======================================================================
+   PERSONALISATION (ROADMAP.md 5.4) — display_name and SECTIONS live in
+   the profiles table when signed in, but are ordinary local-first state
+   otherwise: both persist through the normal collectState()/DB_KEY path
+   like everything above, so a signed-out, single-device user still gets
+   to personalise. cloudSyncProfile()/cloudPushProfile() mirror them to
+   profiles on top of that — see the CLOUD SYNC section below.
+   ====================================================================== */
+let DISPLAY_NAME='';
+const SECTION_KEYS=['agenda','routine','supps','tasks','cal','bio'];
+// Merges onto the all-on default rather than trusting a saved/remote value
+// outright, and never allows every key to end up false — an empty tab bar
+// is not a valid state a backup or a profile row should be able to force.
+function normalizeSections(raw){
+  const merged={agenda:true,routine:true,supps:true,tasks:true,cal:true,bio:true,
+    ...(raw&&typeof raw==='object'?raw:{})};
+  if(!SECTION_KEYS.some(k=>merged[k])) merged.agenda=true;
+  return merged;
+}
+let SECTIONS=normalizeSections();
+// "Mike" -> "Mike's Protocol"; a name already ending in s gets a bare
+// apostrophe ("Lukas' Protocol"), not "Lukas's" — .eyebrow's own
+// text-transform:uppercase does the rest, so this stays natural-case.
+function possessiveProtocolName(name){
+  const n=(name||'').trim();
+  if(!n) return 'ZEUS Protocol';
+  return n+(/s$/i.test(n)?"'":"'s")+' Protocol';
+}
+function applyHeaderBrand(){
+  const el=document.getElementById('eyebrow');
+  if(el) el.textContent=possessiveProtocolName(DISPLAY_NAME);
+}
+
 
 /* ======================================================================
    CALENDAR SUBSCRIPTION  —  read-only iCal feed.
@@ -1485,7 +1523,7 @@ let canPersist=true, lastSaveOk=null;
 // downgrading and re-upgrading does not silently drop data.
 const STATE_KEYS=['v','schema','exportedAt','appVersion','ROUTINES','SUPP_BLOCKS','state',
   'suppState','optOn','PANELS','seenDefaults','IMPORTED','SUBS','SUB_URL','SUB_PROXY',
-  'SUB_MINUTES','EAT_START','EAT_END','TASKS','BP'];
+  'SUB_MINUTES','EAT_START','EAT_END','TASKS','BP','DISPLAY_NAME','SECTIONS'];
 let UNKNOWN_STATE={};
 
 /* The single source of truth for what gets persisted. saveAll() writes this,
@@ -1502,6 +1540,7 @@ function collectState(){
   return {
     ...UNKNOWN_STATE,
     v:2, ROUTINES, SUPP_BLOCKS, state, suppState, optOn, PANELS, seenDefaults, TASKS, BP,
+    DISPLAY_NAME, SECTIONS,
     IMPORTED: IMPORTED.map(e=>({...e,start:e.start.toISOString()})),
     SUBS: SUBS.map(s=>({id:s.id,url:s.url,name:s.name,color:s.color,status:s.status,msg:s.msg,
       last:s.last?new Date(s.last).toISOString():null})),
@@ -1575,6 +1614,8 @@ function applyBackup(d){
   SUB_PROXY=d.SUB_PROXY||''; SUB_MINUTES=d.SUB_MINUTES||15;
   if(typeof d.EAT_START==='number') EAT_START=d.EAT_START;
   if(typeof d.EAT_END==='number') EAT_END=d.EAT_END;
+  DISPLAY_NAME=typeof d.DISPLAY_NAME==='string'?d.DISPLAY_NAME:'';
+  SECTIONS=normalizeSections(d.SECTIONS);
 }
 
 function loadAll(){
@@ -1711,14 +1752,17 @@ async function getSbClient(){
 }
 
 // Reuses the same shape the backup export uses, minus what must never
-// leave the device. PANELS holds parsed lab values — Article 9 health
-// data under GDPR (see CLAUDE.md Privacy / ROADMAP.md 5.2) — so it is
-// stripped here explicitly, by name, precisely so nobody re-adds it by
-// widening collectState() later without noticing this line. SUBS already
-// carries no fetched events (see the comment above collectState()), so
-// there is nothing else here that gets re-fetched anyway.
+// leave the device and what mirrors elsewhere instead. PANELS holds parsed
+// lab values — Article 9 health data under GDPR (see CLAUDE.md Privacy /
+// ROADMAP.md 5.2) — so it is stripped here explicitly, by name, precisely
+// so nobody re-adds it by widening collectState() later without noticing
+// this line. DISPLAY_NAME/SECTIONS (ROADMAP.md 5.4) live in the profiles
+// table instead — see cloudSyncProfile()/cloudPushProfile() — so they are
+// stripped here too, not duplicated into app_data. SUBS already carries
+// no fetched events (see the comment above collectState()), so there is
+// nothing else here that gets re-fetched anyway.
 function cloudSyncPayload(){
-  const {PANELS, ...rest}=collectState();
+  const {PANELS, DISPLAY_NAME, SECTIONS, ...rest}=collectState();
   return rest;
 }
 
@@ -1780,7 +1824,56 @@ async function cloudCheckConsent(sb){
 async function cloudProceedAfterAuth(sb){
   const ok=await cloudCheckConsent(sb);
   render();
-  if(ok) await cloudReconcile(sb);
+  if(!ok) return;
+  await cloudReconcile(sb);
+  await cloudSyncProfile(sb);
+}
+// ROADMAP.md 5.4. Runs after cloudReconcile() above so that, on a brand
+// new profiles row, checking app_data tells us whether this account
+// already had real data — from this device's history or another's —
+// before this feature existed. Only a genuinely empty account (nothing on
+// either side, ever) gets the new-account default of Bio switched off;
+// an existing account keeps whatever it already had, per ROADMAP.md 5.4.
+async function cloudSyncProfile(sb){
+  try{
+    const {data,error}=await sb.from('profiles')
+      .select('display_name,sections').eq('user_id',cloudSession.user.id).maybeSingle();
+    if(error) throw error;
+    if(data){
+      DISPLAY_NAME=data.display_name||'';
+      SECTIONS=normalizeSections(data.sections);
+    }else{
+      const {data:existing}=await sb.from('app_data')
+        .select('user_id').eq('user_id',cloudSession.user.id).maybeSingle();
+      if(!existing) SECTIONS=normalizeSections({...SECTIONS, bio:false});
+      const {error:upErr}=await sb.from('profiles')
+        .upsert({user_id:cloudSession.user.id, display_name:DISPLAY_NAME||null, sections:SECTIONS});
+      if(upErr) throw upErr;
+    }
+    applyHeaderBrand();
+    ensureActiveTabVisible();
+    saveAll();
+    render();
+  }catch(e){
+    // Personalisation is a nice-to-have next to the data itself — never
+    // block sync over it, just keep local values and surface the error.
+    cloudStatusMsg=e.message||cloudStatusMsg;
+  }
+}
+// Fires on every display-name/section edit while signed in. Low-frequency
+// (a blur or a checkbox click, never a keystroke debounce), so a plain
+// upsert is enough — no need for app_data's debounce/skip-if-unchanged
+// machinery here.
+async function cloudPushProfile(){
+  if(!cloudSession||consentGateOpen) return;
+  try{
+    const sb=await getSbClient();
+    const {error}=await sb.from('profiles')
+      .upsert({user_id:cloudSession.user.id, display_name:DISPLAY_NAME||null, sections:SECTIONS});
+    if(error) throw error;
+  }catch(e){
+    cloudStatusMsg=e.message||cloudStatusMsg;
+  }
 }
 
 // Runs once right after sign-in, and again whenever "Sync now" is pressed.
@@ -2570,6 +2663,25 @@ function syncTabFade(){
   w.classList.toggle('at-end', t.scrollLeft+t.clientWidth >= t.scrollWidth-2);
 }
 
+// ROADMAP.md 5.4: SECTIONS decides which tab buttons exist at all. The six
+// buttons always stay in the DOM (setTab()'s [id="tab-"+x] lookups and the
+// desktop rail rely on that) — this only toggles [hidden] on them.
+function renderTabBar(){
+  SECTION_KEYS.forEach(k=>{
+    const b=document.getElementById('tab-'+k);
+    if(b) b.hidden=!SECTIONS[k];
+  });
+}
+function nearestVisibleTab(){
+  return SECTION_KEYS.find(k=>SECTIONS[k]) || 'agenda';
+}
+// Called after anything that can change either SECTIONS or activeTab's
+// eligibility (a toggle flip, a profile pull, boot). Falls back rather
+// than ever leaving activeTab pointed at a hidden tab.
+function ensureActiveTabVisible(){
+  renderTabBar();
+  if(!SECTIONS[activeTab]) setTab(nearestVisibleTab());
+}
 function setTab(t){
   if(t==='cal' && calMode==='day') calMode='week';   // tapping Calendar out of day view goes to the default week view, like Back
   activeTab=t; activeFilter='all';
@@ -2577,7 +2689,7 @@ function setTab(t){
   // this, a blood-pressure validation error or a PDF import result stayed
   // on screen after navigating away and back.
   bpMsg=''; bioMsg='';
-  ['agenda','routine','supps','tasks','cal','bio'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===t));
+  SECTION_KEYS.forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===t));
   document.getElementById('pageTitle').textContent =
     t==='agenda'?'Agenda':t==='routine'?'Daily Routine':t==='supps'?'Supplements':
     t==='tasks'?'Tasks':t==='cal'?'Calendar':'Bio Analysis';
@@ -2626,10 +2738,14 @@ window.addEventListener('resize',()=>{ syncHeaderHeight(); renderRail(); arcOnRe
 // with the day nav, it's the one thing on screen that always means "today".
 // No-ops on mobile, where #railBio/#railTasks stay behind [hidden].
 /* The rail is a summary; these are its way back to the real thing. */
-function railOpenBio(){ setTab('bio'); }
+// Both guarded by SECTIONS.bio even though renderRail() already hides the
+// whole #railBio box when it's off — that box is the only thing these
+// bind to, but a hidden Bio tab should never be reachable full stop.
+function railOpenBio(){ if(SECTIONS.bio) setTab('bio'); }
 function railBioKey(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); railOpenBio(); } }
 function railOpenMarker(e,k){
   if(e) e.stopPropagation();   // the whole section is also a target
+  if(!SECTIONS.bio) return;
   setTab('bio');               // render the tab first, then open onto it
   openMarkerDetail(k);
 }
@@ -2643,7 +2759,12 @@ function renderRail(){
      are the opposite case: the only data in the app you have to go looking
      for, so they are what belongs in a rail that is always on screen. */
   const bioBox=document.getElementById('railBio');
-  if(bioBox){
+  // Inline style, not [hidden]: the (min-width:900px) block below sets
+  // #railBio{display:block} by ID, which beats [hidden]'s attribute
+  // selector on specificity alone regardless of source order. Only an
+  // inline style reliably wins over that.
+  if(bioBox) bioBox.style.display=SECTIONS.bio?'':'none';
+  if(bioBox&&SECTIONS.bio){
     const rows=[];
     const last=BP.length?BP[BP.length-1]:null;
     if(last){
@@ -2682,7 +2803,8 @@ function renderRail(){
   const due=TASKS.filter(t=>!t.done&&t.date===todayKey)
     .sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99'));
   const tBox=document.getElementById('railTasks');
-  if(tBox){
+  if(tBox) tBox.style.display=SECTIONS.tasks?'':'none';
+  if(tBox&&SECTIONS.tasks){
     const rows=due.map(t=>
       `<div class="rail-row"><span class="rail-time">${t.time?esc(t.time):'—'}</span><span class="rail-title">${esc(t.title||'Untitled')}</span></div>`
     ).join('');
@@ -2691,6 +2813,7 @@ function renderRail(){
 }
 
 function render(){
+  applyHeaderBrand();
   renderDate(); renderFilters();
   const c=document.getElementById('content'); c.innerHTML='';
   if(activeTab==='agenda') renderAgenda(c);
@@ -2841,8 +2964,8 @@ function arcOpenTask(id){
   arcCloseOverlay();
   const prev=activeTab; activeTab='tasks'; openSheet('edit',id); activeTab=prev;
 }
-function arcOpenSupp(){ arcCloseOverlay(); setTab('supps'); }
-function nxOpenTab(t){ arcCloseOverlay(); setTab(t); }
+function arcOpenSupp(){ arcCloseOverlay(); setTab(SECTIONS.supps?'supps':nearestVisibleTab()); }
+function nxOpenTab(t){ arcCloseOverlay(); setTab(SECTIONS[t]?t:nearestVisibleTab()); }
 
 /* ---- build ----
    Static furniture first (grid, perimeter ticks, gyro rings, core), then one
@@ -3854,7 +3977,7 @@ function renderAgenda(c){
     const all=b.items.every(i=>m[i.id]); b.items.forEach(i=>m[i.id]=!all); render();
   });
   c.querySelectorAll('[data-edit]').forEach(x=>x.onclick=()=>{ activeTab='routine'; openSheet('edit',x.dataset.edit); activeTab='agenda'; });
-  c.querySelectorAll('[data-goblk]').forEach(x=>x.onclick=()=>setTab('supps'));
+  c.querySelectorAll('[data-goblk]').forEach(x=>x.onclick=()=>setTab(SECTIONS.supps?'supps':nearestVisibleTab()));
   c.querySelectorAll('[data-edel]').forEach(b=>b.onclick=()=>deleteEventById(b.dataset.edel));
   bindTaskRows(c);
   bindDescRows(c);
@@ -4275,6 +4398,44 @@ function accountCardHTML(){
   </div>`;
 }
 
+/* ---------- PERSONALISATION (ROADMAP.md 5.4) ----------
+   Not gated by acctOpen or cloudSession — display_name/SECTIONS work
+   fully offline, and always visible here rather than hidden behind the
+   sign-in card's own collapse, so a signed-out user finds it too. */
+const SECTION_LABELS={agenda:'Agenda',routine:'Routine',supps:'Supplements',tasks:'Tasks',cal:'Calendar',bio:'Bio'};
+function setDisplayName(v){
+  DISPLAY_NAME=v.trim();
+  applyHeaderBrand();
+  saveAll();
+  cloudPushProfile();
+}
+function setSection(k,on){
+  if(!on && SECTION_KEYS.filter(x=>SECTIONS[x]).length<=1){ render(); return; }   // refuse to disable the last one
+  SECTIONS={...SECTIONS,[k]:on};
+  ensureActiveTabVisible();
+  saveAll();
+  cloudPushProfile();
+  render();
+}
+function personalisationCardHTML(){
+  const onCount=SECTION_KEYS.filter(k=>SECTIONS[k]).length;
+  const rows=SECTION_KEYS.map(k=>{
+    const on=!!SECTIONS[k];
+    const lastOne=on&&onCount<=1;
+    return `<label class="section-toggle-row">
+      <span>${SECTION_LABELS[k]}</span>
+      <input type="checkbox" ${on?'checked':''} ${lastOne?'disabled title="At least one tab must stay on"':''}
+        onchange="setSection('${k}',this.checked)">
+    </label>`;
+  }).join('');
+  return `<div class="gcard">
+    <div class="gtop"><span class="gtitle">Personalisation</span></div>
+    <div class="gsub">Your name shows in the header. Section switches decide which tabs appear — synced to your account when signed in, kept on this device otherwise.</div>
+    <input class="gid-input" id="displayNameInput" placeholder="Your name (optional)" value="${esc(DISPLAY_NAME)}" onchange="setDisplayName(this.value)">
+    <div class="section-toggle-list">${rows}</div>
+  </div>`;
+}
+
 function refreshDots(){
   document.querySelectorAll('[data-day]').forEach(b=>{
     const f=dayFlags(parseDay(b.dataset.day));
@@ -4508,6 +4669,7 @@ function renderCalendar(c){
   // view opens below them, on the calendar itself.
   c.insertAdjacentHTML('beforeend', subCardHTML());
   c.insertAdjacentHTML('beforeend', accountCardHTML());
+  c.insertAdjacentHTML('beforeend', personalisationCardHTML());
   c.insertAdjacentHTML('beforeend', calDataSectionHTML());
 
   c.insertAdjacentHTML('beforeend',
@@ -5951,6 +6113,7 @@ function bootMaybeShow(){
 function bootReplay(){ bootShow(true); }
 
 loadAll();
+ensureActiveTabVisible();
 render();
 bootMaybeShow();
 if(ANCHORED_TABS.includes(activeTab)) scrollToAnchor();
