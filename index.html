@@ -1770,6 +1770,12 @@ async function cloudReconcile(sb){
     // and skips, instead of round-tripping the same payload pointlessly.
     cloudLastPushedJSON=JSON.stringify(cloudSyncPayload());
     cloudStatus='synced'; render();
+    // applyBackup() restores SUBS without events (they are never mirrored —
+    // see the comment above collectState()), so a pulled subscription sits
+    // empty until fetched. Same pattern as the boot sequence at the bottom
+    // of this script: start the timer and fetch now instead of waiting up
+    // to SUB_MINUTES for the first refresh.
+    if(SUBS.length){ startSubTimer(); subFetchAll(true); }
     return;
   }
   // Both sides have data. Only "diverged" if the cloud moved on since the
@@ -4079,6 +4085,9 @@ function acctChooseCloud(){
   saveAll();
   cloudLastPushedJSON=JSON.stringify(cloudSyncPayload());   // same reasoning as in cloudReconcile's pull branch
   render();
+  // Same as the pull branch in cloudReconcile: SUBS came back with no
+  // events, so fetch now rather than waiting for the next timer tick.
+  if(SUBS.length){ startSubTimer(); subFetchAll(true); }
 }
 function renderCloudConflict(){
   const ov=document.getElementById('cloudOverlay'); if(!ov) return;
