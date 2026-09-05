@@ -1,13 +1,14 @@
 name: Supabase keep-alive
 
 # Free Supabase projects pause after 7 days without database activity and
-# take ~30s to wake up. This reads one row every 3 days to reset the timer.
-# Store SUPABASE_URL and SUPABASE_ANON_KEY under
+# take ~30s to wake up. This reads one row every 2 days to reset the timer —
+# short enough that a single failed run still leaves a buffer before the
+# project would pause. Store SUPABASE_URL and SUPABASE_ANON_KEY under
 # Settings -> Secrets and variables -> Actions.
 
 on:
   schedule:
-    - cron: '17 4 */3 * *'   # every 3 days at 04:17 UTC
+    - cron: '17 4 */2 * *'   # every 2 days at 04:17 UTC
   workflow_dispatch:          # lets you trigger it by hand to test
 
 jobs:
@@ -16,12 +17,22 @@ jobs:
     steps:
       - name: Query the heartbeat table
         run: |
-          code=$(curl -s -o /tmp/out.txt -w '%{http_code}' \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/heartbeat?select=id&limit=1" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+          ping() {
+            curl -s -o /tmp/out.txt -w '%{http_code}' \
+              "${{ secrets.SUPABASE_URL }}/rest/v1/heartbeat?select=id&limit=1" \
+              -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+              -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
+          }
+          code=$(ping)
           echo "HTTP $code"
           cat /tmp/out.txt
+          if [ "$code" != "200" ]; then
+            echo "First attempt failed — a paused project needs ~30s to wake. Retrying in 45s..."
+            sleep 45
+            code=$(ping)
+            echo "HTTP $code"
+            cat /tmp/out.txt
+          fi
           if [ "$code" != "200" ]; then
             echo "Keep-alive failed — project may be paused or keys are wrong."
             exit 1
