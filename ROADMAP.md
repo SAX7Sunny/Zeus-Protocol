@@ -4,8 +4,11 @@
 
 **Phase 5 — backend, accounts, integrations (current), as of 2026-09-05.**
 5.1 (Supabase accounts with local-first sync), 5.2 (GDPR consent gating) and
-5.4 (per-user personalisation) are deployed and working. **5.3 remains open:**
-Apple Health via Shortcuts first, then Whoop; Eight Sleep stays deferred.
+5.4 (per-user personalisation) are deployed and working. **5.3 is in
+progress:** the `ingest` Edge Function and device-token management
+(Connections panel) are deployed and verified end-to-end. Still open: the
+actual Apple Shortcut, reading Apple Health data back into the app, and
+Whoop; Eight Sleep stays deferred.
 
 **Phase 6** exists as a later option, not a commitment: packaging the web app
 properly, from PWA polish up to a native shell. Only 6.1 is a given; anything
@@ -53,12 +56,25 @@ are scoped per user, and cross-user writes are rejected.
 
 | Source | Path | Notes |
 |---|---|---|
-| **Apple Health** | Shortcuts automation → POST to Edge Function | Only viable route; HealthKit has no web API. Each user installs the Shortcut once. Priority. |
-| **Whoop** | OAuth 2.0 authorization code via Edge Function | Public API exists. Client secret lives server-side; function handles token refresh. |
+| **Apple Health** | Shortcuts automation → POST to Edge Function | Only viable route; HealthKit has no web API. Each user installs the Shortcut once. Priority. Ingest side **deployed and verified 2026-09-05** — see below. Still open: the Shortcut itself, and reading `metrics` back into the Agenda/Bio tab. |
+| **Whoop** | OAuth 2.0 authorization code via Edge Function | Public API exists. Client secret lives server-side; function handles token refresh. Not started. |
 | **Eight Sleep** | Deferred | No official API. Unofficial endpoints need account credentials — not acceptable for other people's accounts. Self-use only, if at all. |
 
 Store fetched metrics per user and per day, keyed by source, so the agenda and
 Bio tab can read them without caring where they came from.
+
+**Ingest foundation deployed and verified (2026-09-05).** `metrics` and
+`device_tokens` (schema in `zeus-schema.sql`, RLS-scoped to their owner) and
+the `ingest` Edge Function (`supabase/functions/ingest`) are live on the
+linked project. The function hashes a presented device token (SHA-256,
+constant-time compare) to resolve a `user_id`, then upserts into `metrics`
+on `(user_id, day, source)` with the service-role key — never exposed to a
+client. Verified end-to-end against a throwaway test account (created and
+deleted via the Admin API): CORS, auth rejection paths, payload validation,
+a real multi-day write, upsert-replace, and revoked-token rejection.
+`index.html`'s account panel has a **Connections** section to generate,
+list and revoke these device tokens; the plaintext is shown once and never
+persisted anywhere.
 
 ### 5.4 Personalisation
 
