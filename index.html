@@ -1629,8 +1629,8 @@ function mergeNewDefaults(){
 // secret. Row-level security in zeus-schema.sql is what actually protects
 // a row (every policy is `auth.uid() = user_id`), so this key alone can
 // read nothing on its own.
-const SUPABASE_URL='https://YOUR-PROJECT-REF.supabase.co';
-const SUPABASE_ANON_KEY='YOUR-ANON-KEY';
+const SUPABASE_URL='https://npdjguzxylmlaogourac.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wZGpndXp4eWxtbGFvZ291cmFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NTEwOTYsImV4cCI6MjEwMjUyNzA5Nn0.-1_rCnPZYtq_Y_pDdcFcffi7pLQBC0Q7PyFbAnpkqjA';
 const SUPABASE_SDK_URL='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
 // Connection metadata, not app data: deliberately its own key, outside
 // DB_KEY and the STATE_KEYS/collectState() contract, so it never ends up
